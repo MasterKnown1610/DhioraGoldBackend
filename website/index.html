@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Promotions Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    h1 {
+      color: #F8C24D;
+      font-size: 1.75rem;
+    }
+    .btn-add {
+      background: #F8C24D;
+      color: #1a1a2e;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-add:hover { opacity: 0.9; }
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      overflow: visible;
+      margin-bottom: 20px;
+    }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    th {
+      background: #0f0f23;
+      color: #a0a0a0;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    tr:last-child td { border-bottom: none; }
+    .id-col { color: #888; font-size: 0.9rem; }
+    .status-active { color: #2ecc71; font-weight: 600; }
+    .status-expired { color: #e74c3c; font-weight: 600; }
+    .actions-cell { white-space: nowrap; overflow: visible; position: relative; }
+    tbody tr { position: relative; }
+    .form-group { margin-bottom: 16px; }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: #a0a0a0;
+      font-size: 0.875rem;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      background: #0f0f23;
+      color: #eee;
+      font-size: 15px;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #F8C24D;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: flex; gap: 16px; }
+    .row .form-group { flex: 1; }
+    button {
+      background: #F8C24D;
+      color: #1a1a2e;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      background: #3a3a5c;
+      color: #eee;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .btn-secondary:hover { background: #4a4a6c; }
+    .btn-danger {
+      background: #e74c3c;
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .btn-icon {
+      background: transparent;
+      color: #a0a0a0;
+      padding: 6px;
+    }
+    .btn-icon:hover { color: #F8C24D; }
+    .actions-dropdown {
+      position: relative;
+      display: inline-block;
+      z-index: 1000;
+    }
+    .dropdown-menu {
+      position: fixed;
+      background: #16213e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      min-width: 150px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      z-index: 99999;
+      display: none;
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-menu button {
+      width: 100%;
+      text-align: left;
+      background: none;
+      color: #eee;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 0;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .dropdown-menu button:hover { background: rgba(248,194,77,0.15); color: #F8C24D; }
+    .dropdown-menu button.danger:hover { background: rgba(231,76,60,0.2); color: #e74c3c; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal h2 { margin-bottom: 20px; font-size: 1.2rem; }
+    .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+    .error { color: #e74c3c; font-size: 13px; margin-top: 8px; }
+    .success { color: #2ecc71; font-size: 13px; margin-top: 8px; }
+    .desc-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hidden { display: none !important; }
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      background: #0f0f23;
+      color: #eee;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    input[type="file"] {
+      padding: 8px 0;
+      cursor: pointer;
+    }
+    .image-preview img { max-width: 100%; max-height: 120px; border-radius: 8px; margin-top: 8px; }
+    .remove-image-label { font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 8px; color: #a0a0a0; }
+    .remove-image-label input { width: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Promotions Admin</h1>
+      <button type="button" class="btn-add" onclick="openAddModal()">
+        <span>+</span> Add Promotion
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Description</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+              <th>Status</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="promoTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add modal -->
+  <div id="addModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Add Promotion</h2>
+      <form id="addForm">
+        <div class="form-group">
+          <label>Title *</label>
+          <input type="text" id="title" required placeholder="e.g. Summer Sale 20% Off">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="description" placeholder="Promotion details..."></textarea>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label>Start Date *</label>
+            <input type="date" id="startDate" required>
+          </div>
+          <div class="form-group">
+            <label>End Date *</label>
+            <input type="date" id="endDate" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Image (optional)</label>
+          <input type="file" id="imageFile" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp">
+        </div>
+        <div class="form-group">
+          <label>CTA Type (optional)</label>
+          <select id="ctaType">
+            <option value="">— None —</option>
+            <option value="phone">Phone Number</option>
+            <option value="website">Visit Website</option>
+            <option value="whatsapp">WhatsApp Message</option>
+          </select>
+        </div>
+        <div id="ctaFields" class="hidden">
+          <div class="form-group" id="addCtaValueGroup">
+            <label id="addCtaValueLabel">Value</label>
+            <input type="text" id="ctaValue" placeholder="">
+          </div>
+          <div class="form-group">
+            <label>CTA Label (optional)</label>
+            <input type="text" id="ctaLabel" placeholder="e.g. Call Now, Visit Site">
+          </div>
+          <div class="form-group hidden" id="addCtaMessageGroup">
+            <label>Pre-filled WhatsApp Message (optional)</label>
+            <textarea id="ctaMessage" placeholder="Message to show in WhatsApp..."></textarea>
+          </div>
+        </div>
+        <div id="addMessage"></div>
+        <div class="modal-actions">
+          <button type="submit" id="addSubmitBtn">Add Promotion</button>
+          <button type="button" class="btn-secondary" onclick="closeAddModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- View modal -->
+  <div id="viewModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>View Promotion</h2>
+      <div id="viewContent"></div>
+      <div class="modal-actions" style="margin-top: 20px">
+        <button type="button" class="btn-secondary" onclick="closeViewModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div id="editModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Edit Promotion</h2>
+      <form id="editForm">
+        <input type="hidden" id="editId">
+        <div class="form-group">
+          <label>Title *</label>
+          <input type="text" id="editTitle" required>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="editDescription"></textarea>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label>Start Date *</label>
+            <input type="date" id="editStartDate" required>
+          </div>
+          <div class="form-group">
+            <label>End Date *</label>
+            <input type="date" id="editEndDate" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Image (optional)</label>
+          <div id="editImagePreview" class="image-preview hidden"></div>
+          <input type="file" id="editImageFile" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp">
+          <label class="remove-image-label" id="editRemoveImageWrap" style="display:none">
+            <input type="checkbox" id="editRemoveImage"> Remove current image
+          </label>
+        </div>
+        <div class="form-group">
+          <label>CTA Type (optional)</label>
+          <select id="editCtaType">
+            <option value="">— None —</option>
+            <option value="phone">Phone Number</option>
+            <option value="website">Visit Website</option>
+            <option value="whatsapp">WhatsApp Message</option>
+          </select>
+        </div>
+        <div id="editCtaFields" class="hidden">
+          <div class="form-group" id="editCtaValueGroup">
+            <label id="editCtaValueLabel">Value</label>
+            <input type="text" id="editCtaValue" placeholder="">
+          </div>
+          <div class="form-group">
+            <label>CTA Label (optional)</label>
+            <input type="text" id="editCtaLabel" placeholder="e.g. Call Now, Visit Site">
+          </div>
+          <div class="form-group hidden" id="editCtaMessageGroup">
+            <label>Pre-filled WhatsApp Message (optional)</label>
+            <textarea id="editCtaMessage" placeholder="Message to show in WhatsApp..."></textarea>
+          </div>
+        </div>
+        <div id="editMessage"></div>
+        <div class="modal-actions">
+          <button type="submit" id="editSubmitBtn">Save Changes</button>
+          <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api';
+    const promoTableBody = document.getElementById('promoTableBody');
+
+    function openAddModal() {
+      document.getElementById('addForm').reset();
+      document.getElementById('addMessage').textContent = '';
+      updateAddCtaFields();
+      document.getElementById('addModal').classList.remove('hidden');
+    }
+
+    function updateAddCtaFields() {
+      const type = document.getElementById('ctaType').value;
+      const ctaFields = document.getElementById('ctaFields');
+      const valueGroup = document.getElementById('addCtaValueGroup');
+      const valueLabel = document.getElementById('addCtaValueLabel');
+      const msgGroup = document.getElementById('addCtaMessageGroup');
+      ctaFields.classList.toggle('hidden', !type);
+      if (type === 'phone') {
+        valueLabel.textContent = 'Phone Number *';
+        document.getElementById('ctaValue').placeholder = 'e.g. +919876543210';
+        valueGroup.classList.remove('hidden');
+        msgGroup.classList.add('hidden');
+      } else if (type === 'website') {
+        valueLabel.textContent = 'Website URL *';
+        document.getElementById('ctaValue').placeholder = 'https://example.com';
+        valueGroup.classList.remove('hidden');
+        msgGroup.classList.add('hidden');
+      } else if (type === 'whatsapp') {
+        valueLabel.textContent = 'WhatsApp Number *';
+        document.getElementById('ctaValue').placeholder = 'e.g. 919876543210 (with country code)';
+        valueGroup.classList.remove('hidden');
+        msgGroup.classList.remove('hidden');
+      }
+    }
+
+    function updateEditCtaFields() {
+      const type = document.getElementById('editCtaType').value;
+      const ctaFields = document.getElementById('editCtaFields');
+      const valueGroup = document.getElementById('editCtaValueGroup');
+      const valueLabel = document.getElementById('editCtaValueLabel');
+      const msgGroup = document.getElementById('editCtaMessageGroup');
+      ctaFields.classList.toggle('hidden', !type);
+      if (type === 'phone') {
+        valueLabel.textContent = 'Phone Number *';
+        document.getElementById('editCtaValue').placeholder = 'e.g. +919876543210';
+        valueGroup.classList.remove('hidden');
+        msgGroup.classList.add('hidden');
+      } else if (type === 'website') {
+        valueLabel.textContent = 'Website URL *';
+        document.getElementById('editCtaValue').placeholder = 'https://example.com';
+        valueGroup.classList.remove('hidden');
+        msgGroup.classList.add('hidden');
+      } else if (type === 'whatsapp') {
+        valueLabel.textContent = 'WhatsApp Number *';
+        document.getElementById('editCtaValue').placeholder = 'e.g. 919876543210 (with country code)';
+        valueGroup.classList.remove('hidden');
+        msgGroup.classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('ctaType').addEventListener('change', updateAddCtaFields);
+    document.getElementById('editCtaType').addEventListener('change', updateEditCtaFields);
+
+    function closeAddModal() {
+      document.getElementById('addModal').classList.add('hidden');
+    }
+
+    document.getElementById('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const addMessage = document.getElementById('addMessage');
+      const addSubmitBtn = document.getElementById('addSubmitBtn');
+      addMessage.textContent = '';
+      addSubmitBtn.disabled = true;
+
+      const ctaType = document.getElementById('ctaType').value;
+      const formData = new FormData();
+      formData.append('title', document.getElementById('title').value.trim());
+      formData.append('description', document.getElementById('description').value.trim());
+      formData.append('startDate', document.getElementById('startDate').value);
+      formData.append('endDate', document.getElementById('endDate').value);
+      const imageFile = document.getElementById('imageFile').files[0];
+      if (imageFile) formData.append('image', imageFile);
+      if (ctaType) {
+        formData.append('ctaType', ctaType);
+        formData.append('ctaValue', document.getElementById('ctaValue').value.trim());
+        formData.append('ctaLabel', document.getElementById('ctaLabel').value.trim());
+        if (ctaType === 'whatsapp') formData.append('ctaMessage', document.getElementById('ctaMessage').value.trim());
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/promotions`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.message || 'Failed to add promotion');
+
+        addMessage.textContent = 'Promotion added successfully!';
+        addMessage.className = 'success';
+        closeAddModal();
+        loadPromotions();
+      } catch (err) {
+        addMessage.textContent = err.message;
+        addMessage.className = 'error';
+      } finally {
+        addSubmitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById('addModal').addEventListener('click', (e) => {
+      if (e.target.id === 'addModal') closeAddModal();
+    });
+
+    async function loadPromotions() {
+      promoTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#888">Loading...</td></tr>';
+
+      try {
+        const res = await fetch(`${API_BASE}/promotions/all`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load');
+
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        if (!data.data || data.data.length === 0) {
+          promoTableBody.innerHTML = '';
+          return;
+        }
+
+        window._promotionsCache = data.data;
+        promoTableBody.innerHTML = data.data.map((p, i) => {
+          const end = new Date(p.endDate);
+          end.setHours(0, 0, 0, 0);
+          const expired = end < now;
+          const shortId = (p._id || '').slice(-6);
+          return `
+            <tr>
+              <td class="id-col">${shortId}</td>
+              <td>${escapeHtml(p.title)}</td>
+              <td class="desc-cell" title="${escapeHtml(p.description || '')}">${escapeHtml((p.description || '').slice(0, 50))}${(p.description || '').length > 50 ? '…' : ''}</td>
+              <td>${formatDate(p.startDate)}</td>
+              <td>${formatDate(p.endDate)}</td>
+              <td><span class="${expired ? 'status-expired' : 'status-active'}">${expired ? 'Expired' : 'Active'}</span></td>
+              <td class="actions-cell" style="text-align:right">
+                <div class="actions-dropdown">
+                  <button type="button" class="btn-icon btn-actions-trigger" data-menu-id="menu-${i}" data-row-index="${i}">⋮</button>
+                  <div id="menu-${i}" class="dropdown-menu" data-row-index="${i}">
+                    <button type="button" onclick="doView(${i}); closeActionsMenu()">
+                      <span>👁</span> View
+                    </button>
+                    <button type="button" onclick="doEdit(${i}); closeActionsMenu()">
+                      <span>✎</span> Edit
+                    </button>
+                    <button type="button" class="danger" onclick="deletePromo('${p._id}'); closeActionsMenu()">
+                      <span>🗑</span> Delete
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        document.querySelectorAll('.btn-actions-trigger').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menuId = btn.dataset.menuId;
+            toggleActionsMenu(menuId, btn);
+          });
+        });
+        document.addEventListener('click', closeAllActionsMenus);
+      } catch (err) {
+        promoTableBody.innerHTML = `<tr><td colspan="7" class="error" style="padding:16px">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function toggleActionsMenu(id, triggerBtn) {
+      document.querySelectorAll('.dropdown-menu.open').forEach((m) => m.classList.remove('open'));
+      const menu = document.getElementById(id);
+      if (!menu) return;
+      const isOpening = !menu.classList.contains('open');
+      if (isOpening && triggerBtn) {
+        const rect = triggerBtn.getBoundingClientRect();
+        menu.style.left = rect.right - 150 + 'px';
+        menu.style.top = (rect.bottom + 4) + 'px';
+      }
+      menu.classList.toggle('open', isOpening);
+    }
+
+    function closeActionsMenu() {
+      document.querySelectorAll('.dropdown-menu.open').forEach((m) => m.classList.remove('open'));
+    }
+
+    function closeAllActionsMenus() {
+      document.querySelectorAll('.dropdown-menu.open').forEach((m) => m.classList.remove('open'));
+    }
+
+    function doView(i) {
+      const p = window._promotionsCache[i];
+      if (p) {
+        const end = new Date(p.endDate);
+        end.setHours(0, 0, 0, 0);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const expired = end < now;
+        document.getElementById('viewContent').innerHTML = `
+          <div class="form-group"><label>Title</label><div style="padding:12px;background:#0f0f23;border-radius:8px">${escapeHtml(p.title)}</div></div>
+          <div class="form-group"><label>Description</label><div style="padding:12px;background:#0f0f23;border-radius:8px;white-space:pre-wrap">${escapeHtml(p.description || '—')}</div></div>
+          <div class="row">
+            <div class="form-group"><label>Start Date</label><div style="padding:12px;background:#0f0f23;border-radius:8px">${formatDate(p.startDate)}</div></div>
+            <div class="form-group"><label>End Date</label><div style="padding:12px;background:#0f0f23;border-radius:8px">${formatDate(p.endDate)}</div></div>
+          </div>
+          <div class="form-group"><label>Status</label><div style="padding:12px"><span class="${expired ? 'status-expired' : 'status-active'}">${expired ? 'Expired' : 'Active'}</span></div></div>
+          ${p.imageUrl ? `<div class="form-group"><label>Image</label><div style="margin-top:8px"><img src="${escapeHtml(p.imageUrl)}" alt="" style="max-width:100%;max-height:200px;border-radius:8px" onerror="this.style.display='none'"></div></div>` : ''}
+          ${p.ctaType ? `
+            <div class="form-group"><label>CTA</label>
+              <div style="padding:12px;background:#0f0f23;border-radius:8px">
+                <strong>${p.ctaType === 'phone' ? 'Phone' : p.ctaType === 'website' ? 'Website' : 'WhatsApp'}</strong>: ${escapeHtml(p.ctaValue || '—')}
+                ${p.ctaLabel ? `<br><small>Label: ${escapeHtml(p.ctaLabel)}</small>` : ''}
+                ${p.ctaMessage ? `<br><small>Message: ${escapeHtml(p.ctaMessage)}</small>` : ''}
+              </div>
+            </div>
+          ` : ''}
+        `;
+        document.getElementById('viewModal').classList.remove('hidden');
+      }
+    }
+
+    function closeViewModal() {
+      document.getElementById('viewModal').classList.add('hidden');
+    }
+
+    document.getElementById('viewModal').addEventListener('click', (e) => {
+      if (e.target.id === 'viewModal') closeViewModal();
+    });
+
+    function doEdit(i) {
+      const p = window._promotionsCache[i];
+      if (p) {
+        const startDateStr = p.startDate ? p.startDate.split('T')[0] : '';
+        const endDateStr = p.endDate ? p.endDate.split('T')[0] : '';
+        openEditModal({
+          id: p._id,
+          title: p.title,
+          description: p.description || '',
+          startDate: startDateStr,
+          endDate: endDateStr,
+          imageUrl: p.imageUrl || '',
+          ctaType: p.ctaType || '',
+          ctaValue: p.ctaValue || '',
+          ctaLabel: p.ctaLabel || '',
+          ctaMessage: p.ctaMessage || '',
+        });
+      }
+    }
+
+    function openEditModal(p) {
+      document.getElementById('editId').value = p.id;
+      document.getElementById('editTitle').value = p.title;
+      document.getElementById('editDescription').value = p.description;
+      document.getElementById('editStartDate').value = p.startDate;
+      document.getElementById('editEndDate').value = p.endDate;
+      document.getElementById('editImageFile').value = '';
+      document.getElementById('editRemoveImage').checked = false;
+      const previewEl = document.getElementById('editImagePreview');
+      if (p.imageUrl) {
+        previewEl.innerHTML = `<img src="${escapeHtml(p.imageUrl)}" alt="">`;
+        previewEl.classList.remove('hidden');
+        document.getElementById('editRemoveImageWrap').style.display = 'block';
+      } else {
+        previewEl.innerHTML = '';
+        previewEl.classList.add('hidden');
+        document.getElementById('editRemoveImageWrap').style.display = 'none';
+      }
+      document.getElementById('editCtaType').value = p.ctaType || '';
+      document.getElementById('editCtaValue').value = p.ctaValue || '';
+      document.getElementById('editCtaLabel').value = p.ctaLabel || '';
+      document.getElementById('editCtaMessage').value = p.ctaMessage || '';
+      updateEditCtaFields();
+      document.getElementById('editMessage').textContent = '';
+      document.getElementById('editModal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').classList.add('hidden');
+    }
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('editId').value;
+      const editMessage = document.getElementById('editMessage');
+      const editSubmitBtn = document.getElementById('editSubmitBtn');
+      editMessage.textContent = '';
+      editSubmitBtn.disabled = true;
+
+      const editCtaType = document.getElementById('editCtaType').value;
+      const formData = new FormData();
+      formData.append('title', document.getElementById('editTitle').value.trim());
+      formData.append('description', document.getElementById('editDescription').value.trim());
+      formData.append('startDate', document.getElementById('editStartDate').value);
+      formData.append('endDate', document.getElementById('editEndDate').value);
+      if (document.getElementById('editRemoveImage').checked) formData.append('removeImage', 'true');
+      const imageFile = document.getElementById('editImageFile').files[0];
+      if (imageFile) formData.append('image', imageFile);
+      formData.append('ctaType', editCtaType || '');
+      formData.append('ctaValue', editCtaType ? document.getElementById('editCtaValue').value.trim() : '');
+      formData.append('ctaLabel', editCtaType ? document.getElementById('editCtaLabel').value.trim() : '');
+      formData.append('ctaMessage', editCtaType === 'whatsapp' ? document.getElementById('editCtaMessage').value.trim() : '');
+
+      try {
+        const res = await fetch(`${API_BASE}/promotions/${id}`, {
+          method: 'PATCH',
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.message || 'Failed to update');
+
+        editMessage.textContent = 'Promotion updated!';
+        editMessage.className = 'success';
+        closeEditModal();
+        loadPromotions();
+      } catch (err) {
+        editMessage.textContent = err.message;
+        editMessage.className = 'error';
+      } finally {
+        editSubmitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById('editModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editModal') closeEditModal();
+    });
+
+    async function deletePromo(id) {
+      if (!confirm('Delete this promotion?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/promotions/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to delete');
+        loadPromotions();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function formatDate(s) {
+      return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    loadPromotions();
+  </script>
+</body>
+</html>

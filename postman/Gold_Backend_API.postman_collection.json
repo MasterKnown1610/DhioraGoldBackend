@@ -1,0 +1,199 @@
+{
+  "info": {
+    "name": "Gold Backend API",
+    "description": "REST API for Gold app - Auth, Shops, Users",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (Email)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Register (Phone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"phoneNumber\": \"9876543210\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Login (Email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Login (Phone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"9876543210\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shops",
+      "item": [
+        {
+          "name": "Register Shop",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "shopName", "value": "Gold Palace", "type": "text" },
+                { "key": "address", "value": "123 Main Street", "type": "text" },
+                { "key": "pincode", "value": "560001", "type": "text" },
+                { "key": "phoneNumber", "value": "9876543210", "type": "text" },
+                { "key": "state", "value": "Karnataka", "type": "text" },
+                { "key": "district", "value": "Bangalore Urban", "type": "text" },
+                { "key": "images", "type": "file", "src": [] }
+              ]
+            },
+            "url": "{{baseUrl}}/api/shops"
+          }
+        },
+        {
+          "name": "Get All Shops (no auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/shops?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shops"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "state", "value": "", "disabled": true },
+                { "key": "district", "value": "", "disabled": true },
+                { "key": "pincode", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Shops (with auth - shows phone)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/shops?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Get Single Shop",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/shops/:id",
+            "variable": [{ "key": "id", "value": "" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "userName", "value": "Ravi Kumar", "type": "text" },
+                { "key": "serviceProvided", "value": "Gold polishing", "type": "text" },
+                { "key": "address", "value": "Block A", "type": "text" },
+                { "key": "state", "value": "Karnataka", "type": "text" },
+                { "key": "district", "value": "Bangalore", "type": "text" },
+                { "key": "phoneNumber", "value": "9876543211", "type": "text" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            },
+            "url": "{{baseUrl}}/api/users"
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Get Single User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/:id",
+            "variable": [{ "key": "id", "value": "" }]
+          }
+        }
+      ]
+    }
+  ]
+}
