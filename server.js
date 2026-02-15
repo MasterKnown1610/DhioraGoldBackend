@@ -36,6 +36,12 @@ app.get('/health', (req, res) => {
   res.status(200).json({ success: true, message: 'API is running' });
 });
 
+// AdMob app-ads.txt (no auth, public, text/plain)
+app.get('/app-ads.txt', (req, res) => {
+  res.type('text/plain');
+  res.send('google.com, pub-4292460929510961, DIRECT, f08c47fec0942fa0');
+});
+
 // 404
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
@@ -46,4 +52,5 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('app-ads.txt configured correctly');
 });
