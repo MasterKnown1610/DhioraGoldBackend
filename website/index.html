@@ -441,7 +441,7 @@
       addMessage.textContent = '';
       addSubmitBtn.disabled = true;
 
-      const ctaType = document.getElementById('ctaType').value;
+      const ctaType = (document.getElementById('ctaType').value || '').trim();
       const formData = new FormData();
       formData.append('title', document.getElementById('title').value.trim());
       formData.append('description', document.getElementById('description').value.trim());
@@ -450,10 +450,13 @@
       const imageFile = document.getElementById('imageFile').files[0];
       if (imageFile) formData.append('image', imageFile);
       if (ctaType) {
+        const ctaValue = document.getElementById('ctaValue').value.trim();
+        const ctaLabel = document.getElementById('ctaLabel').value.trim();
+        const ctaMessage = document.getElementById('ctaMessage').value.trim();
         formData.append('ctaType', ctaType);
-        formData.append('ctaValue', document.getElementById('ctaValue').value.trim());
-        formData.append('ctaLabel', document.getElementById('ctaLabel').value.trim());
-        if (ctaType === 'whatsapp') formData.append('ctaMessage', document.getElementById('ctaMessage').value.trim());
+        if (ctaValue) formData.append('ctaValue', ctaValue);
+        if (ctaLabel) formData.append('ctaLabel', ctaLabel);
+        if (ctaType === 'whatsapp' && ctaMessage) formData.append('ctaMessage', ctaMessage);
       }
 
       try {
@@ -663,7 +666,7 @@
       editMessage.textContent = '';
       editSubmitBtn.disabled = true;
 
-      const editCtaType = document.getElementById('editCtaType').value;
+      const editCtaType = (document.getElementById('editCtaType').value || '').trim();
       const formData = new FormData();
       formData.append('title', document.getElementById('editTitle').value.trim());
       formData.append('description', document.getElementById('editDescription').value.trim());
@@ -672,10 +675,15 @@
       if (document.getElementById('editRemoveImage').checked) formData.append('removeImage', 'true');
       const imageFile = document.getElementById('editImageFile').files[0];
       if (imageFile) formData.append('image', imageFile);
-      formData.append('ctaType', editCtaType || '');
-      formData.append('ctaValue', editCtaType ? document.getElementById('editCtaValue').value.trim() : '');
-      formData.append('ctaLabel', editCtaType ? document.getElementById('editCtaLabel').value.trim() : '');
-      formData.append('ctaMessage', editCtaType === 'whatsapp' ? document.getElementById('editCtaMessage').value.trim() : '');
+      if (editCtaType) {
+        const editCtaValue = document.getElementById('editCtaValue').value.trim();
+        const editCtaLabel = document.getElementById('editCtaLabel').value.trim();
+        const editCtaMessage = document.getElementById('editCtaMessage').value.trim();
+        formData.append('ctaType', editCtaType);
+        if (editCtaValue) formData.append('ctaValue', editCtaValue);
+        if (editCtaLabel) formData.append('ctaLabel', editCtaLabel);
+        if (editCtaType === 'whatsapp' && editCtaMessage) formData.append('ctaMessage', editCtaMessage);
+      }
 
       try {
         const res = await fetch(`${API_BASE}/promotions/${id}`, {
