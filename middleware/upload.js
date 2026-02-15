@@ -29,6 +29,30 @@ const uploadToCloudinary = (buffer, folder = 'goldbackend', mimetype = 'image/jp
 };
 
 /**
+ * Extract Cloudinary public_id from a secure_url.
+ * URL format: .../upload/v<version>/<public_id>.<ext>  (public_id may contain slashes, e.g. folder/name)
+ */
+const getPublicIdFromUrl = (imageUrl) => {
+  if (!imageUrl || typeof imageUrl !== 'string') return null;
+  const parts = imageUrl.split(/\/v\d+\//);
+  if (parts.length < 2) return null;
+  const withExt = parts[1].trim();
+  if (!withExt) return null;
+  return withExt.replace(/\.[^.]+$/, '');
+};
+
+/**
+ * Delete an image from Cloudinary by its secure_url.
+ * @param {string} imageUrl - Full Cloudinary secure_url
+ * @returns {Promise<void>} Resolves when done; rejects on error
+ */
+const deleteFromCloudinary = (imageUrl) => {
+  const publicId = getPublicIdFromUrl(imageUrl);
+  if (!publicId) return Promise.resolve();
+  return cloudinary.uploader.destroy(publicId);
+};
+
+/**
  * Multer: single file (e.g. profile image)
  */
 const uploadSingle = upload.single('image');
@@ -43,4 +67,5 @@ module.exports = {
   uploadSingle,
   uploadMultiple,
   uploadToCloudinary,
+  deleteFromCloudinary,
 };

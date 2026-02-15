@@ -1,6 +1,6 @@
 const Promotion = require('../models/Promotion');
 const asyncHandler = require('../middleware/asyncHandler');
-const { uploadToCloudinary } = require('../middleware/upload');
+const { uploadToCloudinary, deleteFromCloudinary } = require('../middleware/upload');
 
 /**
  * @route   GET /api/promotions
@@ -145,12 +145,24 @@ exports.updatePromotion = asyncHandler(async (req, res) => {
 
 /**
  * @route   DELETE /api/promotions/:id
+ * Deletes the promotion and its image from Cloudinary if present.
  */
 exports.deletePromotion = asyncHandler(async (req, res) => {
-  const promotion = await Promotion.findByIdAndDelete(req.params.id);
+  const promotion = await Promotion.findById(req.params.id);
   if (!promotion) {
     return res.status(404).json({ success: false, message: 'Promotion not found' });
   }
+
+  if (promotion.imageUrl) {
+    try {
+      await deleteFromCloudinary(promotion.imageUrl);
+    } catch (err) {
+      // Log but don't fail the delete; promotion record is still removed
+      console.error('Failed to delete promotion image from Cloudinary:', err?.message || err);
+    }
+  }
+
+  await Promotion.findByIdAndDelete(req.params.id);
 
   res.status(200).json({
     success: true,
