@@ -59,6 +59,7 @@ const shopSchema = new mongoose.Schema(
       ref: 'GlobalUser',
       default: null,
     },
+    boostExpires: { type: Date, default: null },
   },
   { timestamps: true }
 );

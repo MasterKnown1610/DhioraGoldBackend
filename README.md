@@ -244,7 +244,9 @@ goldbackend/
 │   ├── db.js           # MongoDB connection
 │   └── cloudinary.js   # Cloudinary config
 ├── controllers/
+│   ├── admobController.js
 │   ├── authController.js
+│   ├── goldController.js
 │   ├── shopController.js
 │   └── userController.js
 ├── middleware/
@@ -256,14 +258,18 @@ goldbackend/
 ├── models/
 │   ├── GlobalUser.js
 │   ├── Shop.js
+│   ├── Transaction.js
 │   └── User.js
 ├── routes/
+│   ├── admobRoutes.js
 │   ├── authRoutes.js
+│   ├── goldRoutes.js
 │   ├── shopRoutes.js
 │   └── userRoutes.js
 ├── scripts/
 │   └── seed.js
 ├── utils/
+│   ├── admobSsv.js
 │   ├── pagination.js
 │   └── search.js
 ├── .env.example
@@ -283,3 +289,203 @@ Authorization: Bearer <your_jwt_token>
 ```
 
 Obtain the token from `POST /api/auth/login` or `/api/auth/register` (response field `data.token`).
+
+---
+
+## Gold Points & AdMob SSV
+
+The backend includes a **Gold Points** reward system. Points are **only** granted via **AdMob Server-Side Verification (SSV)**; the frontend must never grant rewards on its own.
+
+### How AdMob SSV works
+
+1. User completes a rewarded ad in the app.
+2. Google AdMob sends a **GET** request to your backend callback URL with query params: `user_id`, `reward_amount`, `signature`, `key_id`.
+3. Backend **validates** the request (and in production should **verify the signature** with Google’s public keys), then:
+   - Ensures the user exists and is not over the daily ad cap.
+   - Credits 1 gold point, increments `adsWatchedToday`, updates `lastAdWatchDate`.
+   - Saves a transaction with `source: "reward_ad"`.
+4. Response is returned to AdMob; the app should only show “reward granted” after this callback succeeds.
+
+**Security:** Rewards are granted only when the backend receives and accepts the SSV callback. The `utils/admobSsv.js` helper checks required params; for production you should verify the signature using Google’s verifier keys (e.g. [AdMob SSV docs](https://developers.google.com/admob/android/rewarded-video-ssv) or a library like `@exoshtw/admob-ssv`).
+
+### Daily ad cap (max 20 per day)
+
+- Each user may earn gold from **at most 20 rewarded ads per day**.
+- `adsWatchedToday` is reset when the date changes (next calendar day).
+- If the user has already reached 20 for the day, the SSV endpoint returns **429** with a clear message; no gold is added.
+
+### How gold usage works
+
+- **Unlock phone:** `POST /api/gold/unlock-phone` — costs **2** gold points; records a spend transaction.
+- **Boost shop:** `POST /api/gold/boost-shop` — costs **10** gold points; sets `boostExpires` on the user’s shop (e.g. 7 days).
+- **Remove ads:** `POST /api/gold/remove-ads` — costs **5** gold points; sets `adFreeUntil` on the user (e.g. 30 days).
+
+All gold routes require **JWT** (`Authorization: Bearer <token>`). Each endpoint checks balance before deducting and records a transaction with the appropriate `source`.
+
+### Premium users
+
+If `user.isPremium === true`:
+
+- No gold is deducted for unlock / boost / remove-ads.
+- SSV reward endpoint returns success without adding gold (premium users skip ads).
+- Future payment integration (e.g. Razorpay) can set `isPremium`; payment logic is not implemented yet.
+
+### Gold & AdMob API summary
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/admob/reward` | No (callback from Google) | SSV: grant 1 gold if user exists and under daily cap |
+| POST | `/api/gold/unlock-phone` | JWT | Spend 2 gold; record transaction |
+| POST | `/api/gold/boost-shop` | JWT | Spend 10 gold; set shop `boostExpires` |
+| POST | `/api/gold/remove-ads` | JWT | Spend 5 gold; set user `adFreeUntil` |
+| GET | `/api/gold/wallet` | JWT | Balance, ads today, remaining ads, paginated transactions |
+
+### Response format
+
+All Gold/AdMob responses use the same shape:
+
+```json
+{
+  "success": true,
+  "message": "Reward granted",
+  "data": { ... }
+}
+```
+
+Errors use `success: false` and appropriate HTTP status (400, 401, 404, 429).
+
+### Example requests and responses
+
+**1. AdMob SSV callback (GET – called by Google)**
+
+```bash
+curl -X GET "http://localhost:5000/api/admob/reward?user_id=USER_MONGO_ID&reward_amount=1&signature=SIGNATURE&key_id=KEY_ID"
+```
+
+Success (200):
+
+```json
+{
+  "success": true,
+  "message": "Reward granted",
+  "data": {
+    "goldPoints": 5,
+    "adsWatchedToday": 3,
+    "remainingAdsToday": 17
+  }
+}
+```
+
+Daily cap reached (429):
+
+```json
+{
+  "success": false,
+  "message": "Daily ad limit reached (max 20 per day)",
+  "data": { "adsWatchedToday": 20, "remaining": 0 }
+}
+```
+
+**2. Unlock phone (POST – requires JWT)**
+
+```bash
+curl -X POST http://localhost:5000/api/gold/unlock-phone \
+  -H "Authorization: Bearer YOUR_JWT"
+```
+
+Success (200):
+
+```json
+{
+  "success": true,
+  "message": "Phone unlocked",
+  "data": {
+    "goldPoints": 8,
+    "transaction": { "type": "spend", "amount": 2, "source": "unlock_phone" }
+  }
+}
+```
+
+**3. Wallet (GET – requires JWT)**
+
+```bash
+curl -X GET "http://localhost:5000/api/gold/wallet?page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_JWT"
+```
+
+Success (200):
+
+```json
+{
+  "success": true,
+  "message": "Wallet retrieved",
+  "data": {
+    "goldPoints": 10,
+    "adsWatchedToday": 5,
+    "remainingAdsToday": 15,
+    "isPremium": false,
+    "adFreeUntil": null,
+    "transactions": [...],
+    "pagination": { "page": 1, "limit": 10, "total": 12, "pages": 2 }
+  }
+}
+```
+
+### Sample MongoDB documents
+
+**GlobalUser** (gold-related fields):
+
+```json
+{
+  "_id": "ObjectId(\"...\")",
+  "name": "John",
+  "email": "john@example.com",
+  "goldPoints": 10,
+  "adsWatchedToday": 5,
+  "lastAdWatchDate": "2025-02-14T10:00:00.000Z",
+  "isPremium": false,
+  "adFreeUntil": null
+}
+```
+
+**Transaction**:
+
+```json
+{
+  "_id": "ObjectId(\"...\")",
+  "user": "ObjectId(\"...\")",
+  "type": "earn",
+  "amount": 1,
+  "source": "reward_ad",
+  "createdAt": "2025-02-14T10:00:00.000Z"
+}
+```
+
+**Shop** (boost):
+
+```json
+{
+  "_id": "ObjectId(\"...\")",
+  "shopName": "Gold Palace",
+  "globalUserRef": "ObjectId(\"...\")",
+  "boostExpires": "2025-02-21T10:00:00.000Z"
+}
+```
+
+### Project structure (Gold / AdMob)
+
+```
+goldbackend/
+├── controllers/
+│   ├── admobController.js   # SSV reward handler
+│   └── goldController.js    # unlock, boost, remove-ads, wallet
+├── models/
+│   ├── GlobalUser.js        # goldPoints, adsWatchedToday, lastAdWatchDate, isPremium, adFreeUntil
+│   ├── Transaction.js       # user, type, amount, source
+│   └── Shop.js              # boostExpires
+├── routes/
+│   ├── admobRoutes.js       # GET /reward
+│   └── goldRoutes.js        # /unlock-phone, /boost-shop, /remove-ads, /wallet
+└── utils/
+    └── admobSsv.js          # SSV param validation (extend for signature verification)
+```

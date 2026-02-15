@@ -11,6 +11,8 @@ const shopRoutes = require('./routes/shopRoutes');
 const userRoutes = require('./routes/userRoutes');
 const helpRoutes = require('./routes/helpRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
+const admobRoutes = require('./routes/admobRoutes');
+const goldRoutes = require('./routes/goldRoutes');
 const path = require('path');
 
 connectDB();
@@ -26,6 +28,8 @@ app.use('/api/shops', shopRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/admob', admobRoutes);
+app.use('/api/gold', goldRoutes);
 
 // Promotions admin UI (serve at /promotions-admin/)
 app.use('/promotions-admin', express.static(path.join(__dirname, 'website')));

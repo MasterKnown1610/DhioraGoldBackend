@@ -37,6 +37,11 @@ const globalUserSchema = new mongoose.Schema(
     },
     resetPasswordToken: { type: String, select: false, default: null },
     resetPasswordExpires: { type: Date, select: false, default: null },
+    goldPoints: { type: Number, default: 0, min: 0 },
+    adsWatchedToday: { type: Number, default: 0, min: 0 },
+    lastAdWatchDate: { type: Date, default: null },
+    isPremium: { type: Boolean, default: false },
+    adFreeUntil: { type: Date, default: null },
   },
   { timestamps: true }
 );
