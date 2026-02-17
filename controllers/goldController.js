@@ -10,6 +10,8 @@ const COSTS = {
 };
 const BOOST_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const AD_FREE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const DAILY_AD_CAP = 20;
+const REWARD_AMOUNT = 1;
 
 function standardResponse(res, status, success, message, data = {}) {
   return res.status(status).json({ success, message, data });
@@ -154,16 +156,26 @@ const removeAds = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/gold/wallet
- * Returns current gold, ads today, remaining ads, and paginated transaction history.
+ * Reset adsWatchedToday if the date has changed (new day).
+ * @param {import('mongoose').Document} user
  */
-const getWallet = asyncHandler(async (req, res) => {
-  const user = req.user;
-  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-  const skip = (page - 1) * limit;
+function resetDailyAdCountIfNewDay(user) {
+  const last = user.lastAdWatchDate;
+  if (!last) return;
+  const lastDate = new Date(last.getFullYear(), last.getMonth(), last.getDate());
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (lastDate.getTime() !== todayStart.getTime()) {
+    user.adsWatchedToday = 0;
+  }
+}
 
-  const DAILY_CAP = 20;
+/**
+ * Compute adsWatchedToday and remainingAdsToday for a user (respects new-day reset).
+ * @param {import('mongoose').Document} user
+ * @returns {{ adsWatchedToday: number, remainingAdsToday: number }}
+ */
+function getAdsTodayStats(user) {
   let adsWatchedToday = user.adsWatchedToday;
   const lastAd = user.lastAdWatchDate;
   if (lastAd) {
@@ -174,7 +186,21 @@ const getWallet = asyncHandler(async (req, res) => {
       adsWatchedToday = 0;
     }
   }
-  const remainingAdsToday = Math.max(0, DAILY_CAP - adsWatchedToday);
+  const remainingAdsToday = Math.max(0, DAILY_AD_CAP - adsWatchedToday);
+  return { adsWatchedToday, remainingAdsToday };
+}
+
+/**
+ * GET /api/gold/wallet
+ * Returns current gold, ads today, remaining ads, and paginated transaction history.
+ */
+const getWallet = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+  const skip = (page - 1) * limit;
+
+  const { adsWatchedToday, remainingAdsToday } = getAdsTodayStats(user);
 
   const [transactions, total] = await Promise.all([
     Transaction.find({ user: user._id })
@@ -201,9 +227,91 @@ const getWallet = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * POST /api/gold/ad-watched
+ * Called by the app when the user has completed a rewarded ad (e.g. onEarnedReward).
+ * Credits 1 gold, increments adsWatchedToday, and returns the updated wallet so the
+ * frontend can show the new balance without a separate getWallet call.
+ * SSV may still credit in production; this endpoint allows immediate credit when
+ * the client reports ad completion (e.g. when SSV is not yet or not used).
+ */
+const creditAdWatched = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  if (user.isPremium) {
+    const { adsWatchedToday, remainingAdsToday } = getAdsTodayStats(user);
+    return standardResponse(res, 200, true, 'Premium user; no reward needed', {
+      goldPoints: user.goldPoints,
+      adsWatchedToday,
+      remainingAdsToday,
+      isPremium: true,
+      adFreeUntil: user.adFreeUntil,
+      transactions: [],
+      pagination: { page: 1, limit: 20, total: 0, pages: 1 },
+    });
+  }
+
+  resetDailyAdCountIfNewDay(user);
+  if (user.adsWatchedToday >= DAILY_AD_CAP) {
+    const { remainingAdsToday } = getAdsTodayStats(user);
+    return res.status(429).json({
+      success: false,
+      message: 'Daily ad limit reached (max 20 per day)',
+      data: {
+        goldPoints: user.goldPoints,
+        adsWatchedToday: user.adsWatchedToday,
+        remainingAdsToday,
+      },
+    });
+  }
+
+  const amount = REWARD_AMOUNT;
+  user.goldPoints += amount;
+  user.adsWatchedToday += 1;
+  user.lastAdWatchDate = new Date();
+  await user.save();
+
+  await Transaction.create({
+    user: user._id,
+    type: 'earn',
+    amount,
+    source: 'reward_ad',
+  });
+
+  const page = 1;
+  const limit = 20;
+  const skip = 0;
+  const [transactions, total] = await Promise.all([
+    Transaction.find({ user: user._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Transaction.countDocuments({ user: user._id }),
+  ]);
+
+  const { adsWatchedToday, remainingAdsToday } = getAdsTodayStats(user);
+
+  return standardResponse(res, 200, true, 'Reward granted', {
+    goldPoints: user.goldPoints,
+    adsWatchedToday,
+    remainingAdsToday,
+    isPremium: user.isPremium,
+    adFreeUntil: user.adFreeUntil,
+    transactions,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit) || 1,
+    },
+  });
+});
+
 module.exports = {
   unlockPhone,
   boostShop,
   removeAds,
   getWallet,
+  creditAdWatched,
 };
