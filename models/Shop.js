@@ -60,6 +60,13 @@ const shopSchema = new mongoose.Schema(
       default: null,
     },
     boostExpires: { type: Date, default: null },
+    subscriptionStartDate: { type: Date, default: null },
+    subscriptionEndDate: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
+    },
   },
   { timestamps: true }
 );

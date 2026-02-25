@@ -75,8 +75,41 @@ exports.registerShop = asyncHandler(async (req, res) => {
 /**
  * @route   GET /api/shops
  * @query   search, state, district, pincode, page, limit
+ * Returns only shops with valid subscription (subscriptionEndDate >= now).
  */
 exports.getAllShops = asyncHandler(async (req, res) => {
+  const { search, page, limit, ...rest } = req.query;
+  const searchFilter = buildSearchFilter(search, SHOP_SEARCH_FIELDS);
+  const queryFilters = buildQueryFilters(rest, SHOP_FILTER_KEYS);
+  const now = new Date();
+  const subscriptionFilter = { subscriptionEndDate: { $gte: now } };
+  const statusFilter = { $or: [ { status: 'active' }, { status: { $exists: false } } ] };
+  const filter = {
+    $and: [
+      subscriptionFilter,
+      statusFilter,
+      searchFilter,
+      queryFilters,
+    ].filter((o) => Object.keys(o).length > 0),
+  };
+  const query = Shop.find(filter).sort({ createdAt: -1 });
+
+  const { data, pagination } = await paginate(query, { page, limit });
+  const showPhone = !!req.user;
+  const dataPublic = data.map((s) => toPublicShop(s, showPhone));
+
+  res.status(200).json({
+    success: true,
+    data: dataPublic,
+    pagination,
+  });
+});
+
+/**
+ * @route   GET /api/shops/all
+ * Admin: returns ALL shops (including expired subscription) for management.
+ */
+exports.getAllShopsAdmin = asyncHandler(async (req, res) => {
   const { search, page, limit, ...rest } = req.query;
   const searchFilter = buildSearchFilter(search, SHOP_SEARCH_FIELDS);
   const queryFilters = buildQueryFilters(rest, SHOP_FILTER_KEYS);
@@ -84,8 +117,7 @@ exports.getAllShops = asyncHandler(async (req, res) => {
   const query = Shop.find(Object.keys(filter).length ? filter : {}).sort({ createdAt: -1 });
 
   const { data, pagination } = await paginate(query, { page, limit });
-  const showPhone = !!req.user;
-  const dataPublic = data.map((s) => toPublicShop(s, showPhone));
+  const dataPublic = data.map((s) => toPublicShop(s, true));
 
   res.status(200).json({
     success: true,
@@ -106,5 +138,38 @@ exports.getShop = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: toPublicShop(shop, showPhone),
+  });
+});
+
+/**
+ * @route   PATCH /api/shops/:id/subscription
+ * Admin: extend or set subscription end date. Body: { extendDays: number } or { subscriptionEndDate: ISO string }
+ */
+exports.updateSubscription = asyncHandler(async (req, res) => {
+  const shop = await Shop.findById(req.params.id);
+  if (!shop) {
+    return res.status(404).json({ success: false, message: 'Shop not found' });
+  }
+  const { extendDays, subscriptionEndDate } = req.body;
+  const now = new Date();
+  let endDate;
+  if (subscriptionEndDate) {
+    endDate = new Date(subscriptionEndDate);
+    if (isNaN(endDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid subscriptionEndDate' });
+    }
+  } else if (extendDays != null && Number.isFinite(Number(extendDays))) {
+    const base = shop.subscriptionEndDate && shop.subscriptionEndDate > now ? shop.subscriptionEndDate : now;
+    endDate = new Date(base);
+    endDate.setDate(endDate.getDate() + Number(extendDays));
+  } else {
+    return res.status(400).json({ success: false, message: 'Provide extendDays or subscriptionEndDate' });
+  }
+  shop.subscriptionStartDate = shop.subscriptionStartDate || now;
+  shop.subscriptionEndDate = endDate;
+  await shop.save();
+  res.status(200).json({
+    success: true,
+    data: toPublicShop(shop, true),
   });
 });

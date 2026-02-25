@@ -27,6 +27,8 @@ router.post(
 );
 
 router.get('/', optionalAuth, asyncHandler(userController.getAllUsers));
+router.get('/all', asyncHandler(userController.getAllUsersAdmin));
+router.patch('/:id/subscription', asyncHandler(userController.updateSubscription));
 router.get('/:id', optionalAuth, asyncHandler(userController.getUser));
 
 module.exports = router;

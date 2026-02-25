@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Withdrawal Requests Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; padding: 24px; width: 100%; overflow-x: auto; }
+    .container { width: 100%; max-width: 100%; margin: 0 auto; min-width: 0; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+    h1 { color: #F8C24D; font-size: 1.75rem; }
+    .nav-links { display: flex; gap: 12px; flex-wrap: wrap; }
+    .nav-links a { color: #a0a0a0; text-decoration: none; font-size: 14px; }
+    .nav-links a:hover { color: #F8C24D; }
+    .nav-links a.active { color: #F8C24D; }
+    .card { background: #16213e; border-radius: 12px; overflow: visible; margin-bottom: 20px; width: 100%; }
+    .table-wrap { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; min-width: 900px; border-collapse: collapse; }
+    th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+    th { background: #0f0f23; color: #a0a0a0; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    .id-col { color: #888; font-size: 0.9rem; }
+    .btn-approve { background: #2ecc71; color: #1a1a2e; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-approve:hover { opacity: 0.9; }
+    .btn-reject { background: #e74c3c; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 6px; }
+    .btn-reject:hover { opacity: 0.9; }
+    .btn-reject:disabled, .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+    .amount { font-weight: 600; color: #F8C24D; }
+    .error { color: #e74c3c; font-size: 13px; margin-top: 8px; }
+    .success { color: #2ecc71; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Withdrawal Requests</h1>
+      <div class="nav-links">
+        <a href="index.html">Promotions</a>
+        <a href="service-providers.html">Service Providers</a>
+        <a href="shops.html">Shops</a>
+        <a href="withdrawal-requests.html" class="active">Withdrawal Requests</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Name</th>
+              <th>Email / Phone</th>
+              <th>Referral Code</th>
+              <th>Balance</th>
+              <th>Amount</th>
+              <th>Type</th>
+              <th>UPI Phone</th>
+              <th>Requested At</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api';
+    const tableBody = document.getElementById('tableBody');
+
+    function formatDate(s) {
+      if (!s) return '—';
+      return new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    async function loadList() {
+      tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:#888">Loading...</td></tr>';
+      try {
+        const res = await fetch(`${API_BASE}/referral/withdrawal-requests`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load');
+        if (!data.data || data.data.length === 0) {
+          tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:#888">No pending withdrawal requests</td></tr>';
+          return;
+        }
+        const list = data.data;
+        const typeLabel = (t) => (t === 'gpay' ? 'GPay' : t === 'phonepe' ? 'PhonePe' : '—');
+        tableBody.innerHTML = list.map((u, i) => {
+          const shortId = (u._id || '').slice(-8);
+          const contact = [u.email, u.phoneNumber].filter(Boolean).join(' / ') || '—';
+          const amount = u.referralWithdrawalAmount ?? u.referralBalance ?? 0;
+          return `
+            <tr data-user-id="${u._id}">
+              <td class="id-col">${shortId}</td>
+              <td>${escapeHtml(u.name || '—')}</td>
+              <td>${escapeHtml(contact)}</td>
+              <td>${escapeHtml(u.referralCode || '—')}</td>
+              <td>₹${Number(u.referralBalance ?? 0)}</td>
+              <td class="amount">₹${amount}</td>
+              <td>${typeLabel(u.referralWithdrawalType)}</td>
+              <td>${escapeHtml(u.referralWithdrawalPhone || '—')}</td>
+              <td>${formatDate(u.referralRefundRequestedAt)}</td>
+              <td style="text-align:right">
+                <button type="button" class="btn-approve" data-action="approve" data-id="${u._id}">Approve</button>
+                <button type="button" class="btn-reject" data-action="reject" data-id="${u._id}">Reject</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        tableBody.querySelectorAll('[data-action]').forEach(btn => {
+          btn.addEventListener('click', handleAction);
+        });
+      } catch (err) {
+        tableBody.innerHTML = `<tr><td colspan="10" class="error" style="padding:16px">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    async function handleAction(e) {
+      const btn = e.target;
+      const action = btn.dataset.action;
+      const userId = btn.dataset.id;
+      if (!userId || !['approve', 'reject'].includes(action)) return;
+      const confirmMsg = action === 'approve'
+        ? 'Approve this withdrawal? The amount will be deducted from the user\'s referral balance.'
+        : 'Reject this withdrawal? The request will be cancelled and balance will remain unchanged.';
+      if (!confirm(confirmMsg)) return;
+      const approveBtn = tableBody.querySelector(`[data-id="${userId}"][data-action="approve"]`);
+      const rejectBtn = tableBody.querySelector(`[data-id="${userId}"][data-action="reject"]`);
+      if (approveBtn) approveBtn.disabled = true;
+      if (rejectBtn) rejectBtn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/referral/withdrawal-requests/${userId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Request failed');
+        loadList();
+      } catch (err) {
+        alert(err.message || 'Failed to process request');
+        if (approveBtn) approveBtn.disabled = false;
+        if (rejectBtn) rejectBtn.disabled = false;
+      }
+    }
+
+    loadList();
+  </script>
+</body>
+</html>

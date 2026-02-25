@@ -28,6 +28,8 @@ router.post(
 );
 
 router.get('/', optionalAuth, asyncHandler(shopController.getAllShops));
+router.get('/all', asyncHandler(shopController.getAllShopsAdmin));
+router.patch('/:id/subscription', asyncHandler(shopController.updateSubscription));
 router.get('/:id', optionalAuth, asyncHandler(shopController.getShop));
 
 module.exports = router;

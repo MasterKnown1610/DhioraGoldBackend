@@ -42,6 +42,15 @@ const globalUserSchema = new mongoose.Schema(
     lastAdWatchDate: { type: Date, default: null },
     isPremium: { type: Boolean, default: false },
     adFreeUntil: { type: Date, default: null },
+    referralCode: { type: String, trim: true, default: null, unique: true, sparse: true },
+    referralBalance: { type: Number, default: 0, min: 0 },
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'GlobalUser', default: null },
+    referralRefundRequestedAt: { type: Date, default: null },
+    referralWithdrawalAmount: { type: Number, default: null },
+    referralWithdrawalType: { type: String, enum: ['phonepe', 'gpay'], default: null },
+    referralWithdrawalPhone: { type: String, trim: true, default: null },
+    pendingUserSubscriptionEndDate: { type: Date, default: null },
+    pendingShopSubscriptionEndDate: { type: Date, default: null },
   },
   { timestamps: true }
 );

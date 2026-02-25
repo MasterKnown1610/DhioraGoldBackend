@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Service Providers Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; padding: 24px; width: 100%; overflow-x: auto; }
+    .container { width: 100%; max-width: 100%; margin: 0 auto; min-width: 0; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+    h1 { color: #F8C24D; font-size: 1.75rem; }
+    .nav-links { display: flex; gap: 12px; }
+    .nav-links a { color: #a0a0a0; text-decoration: none; font-size: 14px; }
+    .nav-links a:hover { color: #F8C24D; }
+    .card { background: #16213e; border-radius: 12px; overflow: visible; margin-bottom: 20px; width: 100%; }
+    .table-wrap { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; min-width: 800px; border-collapse: collapse; }
+    th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+    th { background: #0f0f23; color: #a0a0a0; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    .id-col { color: #888; font-size: 0.9rem; }
+    .status-active { color: #2ecc71; font-weight: 600; }
+    .status-expired { color: #e74c3c; font-weight: 600; }
+    .btn-secondary { background: #3a3a5c; color: #eee; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+    .btn-secondary:hover { background: #4a4a6c; }
+    .btn-add { background: #F8C24D; color: #1a1a2e; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    .btn-add:hover { opacity: 0.9; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 20px; }
+    .modal-overlay.hidden { display: none; }
+    .modal { background: #16213e; border-radius: 12px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+    .modal h2 { margin-bottom: 16px; font-size: 1.2rem; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; color: #a0a0a0; font-size: 0.875rem; }
+    input { width: 100%; padding: 12px 14px; border: 1px solid #2a2a4a; border-radius: 8px; background: #0f0f23; color: #eee; font-size: 15px; }
+    .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+    button { background: #F8C24D; color: #1a1a2e; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    .hidden { display: none !important; }
+    .error { color: #e74c3c; font-size: 13px; margin-top: 8px; }
+    .success { color: #2ecc71; font-size: 13px; margin-top: 8px; }
+    .view-row { padding: 8px 0; border-bottom: 1px solid #2a2a4a; }
+    .view-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Service Providers Admin</h1>
+      <div class="nav-links">
+        <a href="index.html">Promotions</a>
+        <a href="service-providers.html">Service Providers</a>
+        <a href="shops.html">Shops</a>
+        <a href="withdrawal-requests.html">Withdrawal Requests</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Service</th>
+              <th>Phone</th>
+              <th>State / District</th>
+              <th>Subscription End</th>
+              <th>Status</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>View Service Provider</h2>
+      <div id="viewContent"></div>
+      <div class="modal-actions" style="margin-top: 20px">
+        <button type="button" class="btn-secondary" onclick="closeViewModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="extendModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Extend Subscription</h2>
+      <form id="extendForm">
+        <input type="hidden" id="extendId">
+        <div class="form-group">
+          <label>Extend by (days) *</label>
+          <input type="number" id="extendDays" min="1" value="30" required>
+        </div>
+        <div id="extendMessage"></div>
+        <div class="modal-actions">
+          <button type="submit" id="extendSubmitBtn">Extend</button>
+          <button type="button" class="btn-secondary" onclick="closeExtendModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api';
+    const tableBody = document.getElementById('tableBody');
+
+    function formatDate(s) {
+      if (!s) return '—';
+      return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    async function loadList() {
+      tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#888">Loading...</td></tr>';
+      try {
+        const res = await fetch(`${API_BASE}/users/all`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load');
+        const now = new Date();
+        if (!data.data || data.data.length === 0) {
+          tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#888">No service providers</td></tr>';
+          return;
+        }
+        window._listCache = data.data;
+        tableBody.innerHTML = data.data.map((u, i) => {
+          const end = u.subscriptionEndDate ? new Date(u.subscriptionEndDate) : null;
+          const expired = !end || end < now;
+          const shortId = (u._id || '').slice(-6);
+          return `
+            <tr>
+              <td class="id-col">${shortId}</td>
+              <td>${escapeHtml(u.userName)}</td>
+              <td>${escapeHtml(u.serviceProvided)}</td>
+              <td>${escapeHtml(u.phoneNumber || '—')}</td>
+              <td>${escapeHtml(u.state || '')} / ${escapeHtml(u.district || '')}</td>
+              <td>${formatDate(u.subscriptionEndDate)}</td>
+              <td><span class="${expired ? 'status-expired' : 'status-active'}">${expired ? 'Expired' : 'Active'}</span></td>
+              <td style="text-align:right">
+                <button type="button" class="btn-secondary" onclick="doView(${i})">View</button>
+                <button type="button" class="btn-add" onclick="doExtend('${u._id}', ${i})" style="margin-left:6px">Extend</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        tableBody.innerHTML = `<tr><td colspan="8" class="error" style="padding:16px">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function doView(i) {
+      const u = window._listCache[i];
+      if (!u) return;
+      const end = u.subscriptionEndDate ? new Date(u.subscriptionEndDate) : null;
+      const now = new Date();
+      const expired = !end || end < now;
+      document.getElementById('viewContent').innerHTML = `
+        <div class="view-row"><strong>Name</strong><br>${escapeHtml(u.userName)}</div>
+        <div class="view-row"><strong>Service</strong><br>${escapeHtml(u.serviceProvided)}</div>
+        <div class="view-row"><strong>Phone</strong><br>${escapeHtml(u.phoneNumber || '—')}</div>
+        <div class="view-row"><strong>Address</strong><br>${escapeHtml(u.address || '—')}</div>
+        <div class="view-row"><strong>State / District / City</strong><br>${escapeHtml([u.state, u.district, u.city].filter(Boolean).join(', '))}</div>
+        <div class="view-row"><strong>Pincode</strong><br>${escapeHtml(u.pincode || '—')}</div>
+        <div class="view-row"><strong>Subscription end</strong><br>${formatDate(u.subscriptionEndDate)}</div>
+        <div class="view-row"><strong>Status</strong><br><span class="${expired ? 'status-expired' : 'status-active'}">${expired ? 'Expired' : 'Active'}</span></div>
+      `;
+      document.getElementById('viewModal').classList.remove('hidden');
+    }
+
+    function closeViewModal() {
+      document.getElementById('viewModal').classList.add('hidden');
+    }
+
+    function doExtend(id, i) {
+      document.getElementById('extendId').value = id;
+      document.getElementById('extendDays').value = 30;
+      document.getElementById('extendMessage').textContent = '';
+      document.getElementById('extendModal').classList.remove('hidden');
+    }
+
+    function closeExtendModal() {
+      document.getElementById('extendModal').classList.add('hidden');
+    }
+
+    document.getElementById('extendForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('extendId').value;
+      const extendDays = parseInt(document.getElementById('extendDays').value, 10);
+      const msgEl = document.getElementById('extendMessage');
+      const btn = document.getElementById('extendSubmitBtn');
+      msgEl.textContent = '';
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/users/${id}/subscription`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ extendDays }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to extend');
+        msgEl.textContent = 'Subscription extended.';
+        msgEl.className = 'success';
+        closeExtendModal();
+        loadList();
+      } catch (err) {
+        msgEl.textContent = err.message;
+        msgEl.className = 'error';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('viewModal').addEventListener('click', (e) => { if (e.target.id === 'viewModal') closeViewModal(); });
+    document.getElementById('extendModal').addEventListener('click', (e) => { if (e.target.id === 'extendModal') closeExtendModal(); });
+
+    loadList();
+  </script>
+</body>
+</html>

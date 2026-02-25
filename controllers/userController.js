@@ -50,8 +50,40 @@ exports.registerUser = asyncHandler(async (req, res) => {
 /**
  * @route   GET /api/users
  * @query   search, state, district, pincode, page, limit
+ * Returns only service providers with valid subscription (subscriptionEndDate >= now).
  */
 exports.getAllUsers = asyncHandler(async (req, res) => {
+  const { search, page, limit, state, district, pincode } = req.query;
+  const searchFilter = buildSearchFilter(search, USER_SEARCH_FIELDS);
+  const queryFilters = buildQueryFilters({ state, district, pincode }, USER_FILTER_KEYS);
+  const now = new Date();
+  const subscriptionFilter = { subscriptionEndDate: { $gte: now } };
+  const statusFilter = { $or: [ { status: 'active' }, { status: { $exists: false } } ] };
+  const filter = {
+    $and: [
+      subscriptionFilter,
+      statusFilter,
+      searchFilter,
+      queryFilters,
+    ].filter((o) => Object.keys(o).length > 0),
+  };
+  const query = User.find(filter).sort({ createdAt: -1 });
+
+  const { data, pagination } = await paginate(query, { page, limit });
+  const dataPublic = data.map((u) => toPublicUser(u, !!req.user));
+
+  res.status(200).json({
+    success: true,
+    data: dataPublic,
+    pagination,
+  });
+});
+
+/**
+ * @route   GET /api/users/all
+ * Admin: returns ALL service providers (including expired subscription) for management.
+ */
+exports.getAllUsersAdmin = asyncHandler(async (req, res) => {
   const { search, page, limit, state, district, pincode } = req.query;
   const searchFilter = buildSearchFilter(search, USER_SEARCH_FIELDS);
   const queryFilters = buildQueryFilters({ state, district, pincode }, USER_FILTER_KEYS);
@@ -76,6 +108,39 @@ exports.getUser = asyncHandler(async (req, res) => {
   if (!user) {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
+  res.status(200).json({
+    success: true,
+    data: toPublicUser(user, !!req.user),
+  });
+});
+
+/**
+ * @route   PATCH /api/users/:id/subscription
+ * Admin: extend or set subscription end date. Body: { extendDays: number } or { subscriptionEndDate: ISO string }
+ */
+exports.updateSubscription = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+  const { extendDays, subscriptionEndDate } = req.body;
+  const now = new Date();
+  let endDate;
+  if (subscriptionEndDate) {
+    endDate = new Date(subscriptionEndDate);
+    if (isNaN(endDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid subscriptionEndDate' });
+    }
+  } else if (extendDays != null && Number.isFinite(Number(extendDays))) {
+    const base = user.subscriptionEndDate && user.subscriptionEndDate > now ? user.subscriptionEndDate : now;
+    endDate = new Date(base);
+    endDate.setDate(endDate.getDate() + Number(extendDays));
+  } else {
+    return res.status(400).json({ success: false, message: 'Provide extendDays or subscriptionEndDate' });
+  }
+  user.subscriptionStartDate = user.subscriptionStartDate || now;
+  user.subscriptionEndDate = endDate;
+  await user.save();
   res.status(200).json({
     success: true,
     data: toPublicUser(user, true),

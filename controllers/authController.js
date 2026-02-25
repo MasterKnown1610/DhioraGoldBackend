@@ -10,12 +10,28 @@ const createToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
+const generateReferralCode = () => crypto.randomBytes(4).toString('hex').toUpperCase();
+
+async function ensureReferralCode(globalUser) {
+  if (globalUser.referralCode) return globalUser.referralCode;
+  let code = generateReferralCode();
+  let exists = await GlobalUser.findOne({ referralCode: code });
+  while (exists) {
+    code = generateReferralCode();
+    exists = await GlobalUser.findOne({ referralCode: code });
+  }
+  globalUser.referralCode = code;
+  await globalUser.save();
+  return code;
+}
+exports.ensureReferralCode = ensureReferralCode;
+
 /**
  * @route   POST /api/auth/register
- * @body    name, email?, phoneNumber?, password (at least one of email or phoneNumber)
+ * @body    name, email?, phoneNumber?, password, referralCode? (at least one of email or phoneNumber)
  */
 exports.register = asyncHandler(async (req, res) => {
-  const { name, email, phoneNumber, password } = req.body;
+  const { name, email, phoneNumber, password, referralCode: refCode } = req.body;
 
   if (!email && !phoneNumber) {
     return res.status(400).json({
@@ -38,14 +54,28 @@ exports.register = asyncHandler(async (req, res) => {
     });
   }
 
+  let referredBy = null;
+  if (refCode && typeof refCode === 'string' && refCode.trim()) {
+    const referrer = await GlobalUser.findOne({ referralCode: refCode.trim().toUpperCase() });
+    if (referrer) referredBy = referrer._id;
+  }
+
   const user = await GlobalUser.create({
     name,
     email: email || undefined,
     phoneNumber: phoneNumber || undefined,
     password,
+    referredBy: referredBy || undefined,
   });
 
+  if (referredBy) {
+    await GlobalUser.findByIdAndUpdate(referredBy, {
+      $inc: { referralBalance: 1 },
+    });
+  }
+
   const token = createToken(user._id);
+  const referralCode = await ensureReferralCode(user);
   res.status(201).json({
     success: true,
     data: {
@@ -54,6 +84,8 @@ exports.register = asyncHandler(async (req, res) => {
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
+        referralCode,
+        referralBalance: user.referralBalance,
       },
       token,
     },
@@ -107,11 +139,15 @@ exports.getMe = asyncHandler(async (req, res) => {
 });
 
 async function buildAuthPayload(globalUser) {
+  const referralCode = await ensureReferralCode(globalUser);
   const user = {
     id: globalUser._id,
     name: globalUser.name,
     email: globalUser.email,
     phoneNumber: globalUser.phoneNumber,
+    referralCode,
+    referralBalance: globalUser.referralBalance ?? 0,
+    referralRefundRequestedAt: globalUser.referralRefundRequestedAt || null,
   };
   let userProfile = null;
   let shopProfile = null;
@@ -185,6 +221,15 @@ exports.registerServiceProvider = asyncHandler(async (req, res) => {
     profileImage = await uploadToCloudinary(req.file.buffer, 'goldbackend/users', req.file.mimetype);
   }
 
+  const now = new Date();
+  let subscriptionStart = null;
+  let subscriptionEnd = null;
+  if (globalUser.pendingUserSubscriptionEndDate && globalUser.pendingUserSubscriptionEndDate > now) {
+    subscriptionEnd = globalUser.pendingUserSubscriptionEndDate;
+    subscriptionStart = new Date(subscriptionEnd);
+    subscriptionStart.setDate(subscriptionStart.getDate() - 30);
+  }
+
   const userProfile = await User.create({
     userName: userName.trim(),
     serviceProvided: serviceProvided.trim(),
@@ -196,9 +241,12 @@ exports.registerServiceProvider = asyncHandler(async (req, res) => {
     pincode: pincode.trim(),
     profileImage,
     globalUserRef: globalUser._id,
+    subscriptionStartDate: subscriptionStart,
+    subscriptionEndDate: subscriptionEnd,
   });
 
   globalUser.userProfileRef = userProfile._id;
+  globalUser.pendingUserSubscriptionEndDate = undefined;
   await globalUser.save();
 
   const payload = await buildAuthPayload(globalUser);
@@ -318,6 +366,15 @@ exports.registerShop = asyncHandler(async (req, res) => {
     imageUrls = await Promise.all(uploads);
   }
 
+  const now = new Date();
+  let subscriptionStart = null;
+  let subscriptionEnd = null;
+  if (globalUser.pendingShopSubscriptionEndDate && globalUser.pendingShopSubscriptionEndDate > now) {
+    subscriptionEnd = globalUser.pendingShopSubscriptionEndDate;
+    subscriptionStart = new Date(subscriptionEnd);
+    subscriptionStart.setDate(subscriptionStart.getDate() - 30);
+  }
+
   const shopProfile = await Shop.create({
     shopName: shopName.trim(),
     address: address.trim(),
@@ -330,9 +387,12 @@ exports.registerShop = asyncHandler(async (req, res) => {
     images: imageUrls,
     openingHours: parseOpeningHours(openingHours),
     globalUserRef: globalUser._id,
+    subscriptionStartDate: subscriptionStart,
+    subscriptionEndDate: subscriptionEnd,
   });
 
   globalUser.shopProfileRef = shopProfile._id;
+  globalUser.pendingShopSubscriptionEndDate = undefined;
   await globalUser.save();
 
   const payload = await buildAuthPayload(globalUser);

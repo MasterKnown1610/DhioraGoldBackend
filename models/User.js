@@ -51,6 +51,13 @@ const userSchema = new mongoose.Schema(
       ref: 'GlobalUser',
       default: null,
     },
+    subscriptionStartDate: { type: Date, default: null },
+    subscriptionEndDate: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
+    },
   },
   { timestamps: true }
 );
