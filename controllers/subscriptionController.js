@@ -6,8 +6,11 @@ const GlobalUser = require('../models/GlobalUser');
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
-const PLAN_SERVICE = process.env.RAZORPAY_PLAN_SERVICE ;
-const PLAN_SHOP = process.env.RAZORPAY_PLAN_SHOP ;
+const PLAN_SERVICE = process.env.RAZORPAY_PLAN_SERVICE || 'plan_SKfWn8O1Naj9Nn';
+const PLAN_SHOP = process.env.RAZORPAY_PLAN_SHOP || 'plan_SKfc3LUbFHdPVp';
+
+// 3-year subscription: 36 months total, expire at end of 35th month (35 billing cycles).
+const SUBSCRIPTION_TOTAL_COUNT = 35;
 
 const getRazorpayInstance = () => {
   if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
@@ -45,7 +48,8 @@ async function getOrCreateRazorpayCustomer(globalUser) {
  * @route   POST /api/subscription/create
  * @body    { user_id?: string, plan_type: "SERVICE" | "SHOP" }
  * Creates Razorpay subscription (AutoPay), saves with status CREATED. Activation happens via webhook.
- * If user_id is omitted, uses logged-in user. Otherwise user_id must match req.user (users can only create for themselves).
+ * Does NOT update User/Shop subscription dates here — access is granted only after Razorpay confirms
+ * payment (subscription.activated / subscription.charged webhook). Until then the user has no listing access.
  */
 exports.createSubscription = asyncHandler(async (req, res) => {
   const { plan_type } = req.body;
@@ -91,17 +95,22 @@ exports.createSubscription = asyncHandler(async (req, res) => {
   try {
     customerId = await getOrCreateRazorpayCustomer(globalUser);
     const razorpay = getRazorpayInstance();
-    const nowUnix = Math.floor(Date.now() / 1000);
+    // 3-year plan: 35 billing cycles (monthly), expires at end of 35th month. Use total_count only (no end_at/start_at).
     const subscriptionPayload = {
       plan_id,
       customer_id: customerId,
-      total_count: 1200,
       customer_notify: 1,
-      start_at: nowUnix + 60,
-      expire_by: nowUnix + 30 * 24 * 60 * 60,
+      total_count: SUBSCRIPTION_TOTAL_COUNT,
     };
+    console.log('[subscription/create] Razorpay subscription payload:', JSON.stringify(subscriptionPayload, null, 2));
     razorpaySubscription = await razorpay.subscriptions.create(subscriptionPayload);
+    console.log('[subscription/create] Razorpay subscription created:', razorpaySubscription?.id);
   } catch (razorpayErr) {
+    console.error('[subscription/create] Razorpay subscription error:', {
+      statusCode: razorpayErr.statusCode,
+      error: razorpayErr.error,
+      full: JSON.stringify(razorpayErr, null, 2),
+    });
     const statusCode = razorpayErr.statusCode || 502;
     const msg =
       razorpayErr.error?.description ||
@@ -114,6 +123,8 @@ exports.createSubscription = asyncHandler(async (req, res) => {
     });
   }
 
+  // Save subscription only; do NOT set User/Shop subscriptionStartDate/subscriptionEndDate.
+  // Those are set only in webhook after payment is confirmed (subscription.activated / subscription.charged).
   await Subscription.create({
     user_id: globalUser._id,
     plan_type: planTypeUpper,

@@ -76,6 +76,7 @@ exports.registerShop = asyncHandler(async (req, res) => {
  * @route   GET /api/shops
  * @query   search, state, district, pincode, page, limit
  * Returns only shops with valid subscription (subscriptionEndDate >= now).
+ * subscriptionEndDate is set only after payment is confirmed via Razorpay webhook (subscription.activated / subscription.charged).
  */
 exports.getAllShops = asyncHandler(async (req, res) => {
   const { search, page, limit, ...rest } = req.query;

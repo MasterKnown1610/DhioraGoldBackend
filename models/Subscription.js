@@ -39,6 +39,5 @@ const subscriptionSchema = new mongoose.Schema(
 );
 
 subscriptionSchema.index({ user_id: 1, plan_type: 1 });
-subscriptionSchema.index({ razorpay_subscription_id: 1 });
 
 module.exports = mongoose.model('Subscription', subscriptionSchema);

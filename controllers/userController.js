@@ -51,6 +51,7 @@ exports.registerUser = asyncHandler(async (req, res) => {
  * @route   GET /api/users
  * @query   search, state, district, pincode, page, limit
  * Returns only service providers with valid subscription (subscriptionEndDate >= now).
+ * subscriptionEndDate is set only after payment is confirmed via Razorpay webhook (subscription.activated / subscription.charged).
  */
 exports.getAllUsers = asyncHandler(async (req, res) => {
   const { search, page, limit, state, district, pincode } = req.query;

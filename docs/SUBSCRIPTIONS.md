@@ -2,7 +2,7 @@
 
 ## Overview
 
-Service Provider and Shop listings use **Razorpay Subscriptions** with `total_count: 0` (unlimited monthly billing until the user cancels). Activation and renewals are driven by webhooks; the app does not activate subscriptions from the payment success callback.
+Service Provider and Shop listings use **Razorpay Subscriptions** (e.g. 35 monthly billing cycles). Activation and renewals are driven by webhooks; the app does not activate subscriptions from the payment success callback.
 
 ## Plan IDs
 
@@ -53,4 +53,30 @@ The backend creates a Razorpay customer (if needed), then a subscription with `t
 - **subscriptions**: user_id, plan_type, razorpay_subscription_id, subscription_status, start_date, expiry_date.
 - **subscription_payments**: user_id, subscription_id, razorpay_payment_id, amount, payment_date, status.
 
-Subscription is not auto-cancelled; it runs until the user cancels in Razorpay or via your UI if you add a cancel API.
+Subscription runs for the configured `total_count` cycles (e.g. 35 months).
+
+---
+
+## Troubleshooting: Money not deducted / AutoPay not charging
+
+1. **First payment (auth)**  
+   The **first** deduction happens when the user completes the Razorpay checkout (enters card and pays). If they close checkout without paying, the subscription stays in `CREATED` and no money is taken. Ensure the user completes the full payment flow in the Razorpay screen.
+
+2. **Webhook not configured**  
+   Razorpay must call your webhook so your app marks the subscription active and (later) extends expiry on each charge.  
+   - In **Razorpay Dashboard → Settings → Webhooks**, add URL: `https://your-api-domain.com/api/webhook/razorpay`  
+   - Enable events: `subscription.activated`, `subscription.charged`, `payment.failed`, `subscription.cancelled`  
+   - Copy the **Webhook Secret** and set it in your env as `RAZORPAY_WEBHOOK_SECRET`  
+   - If the secret is wrong or URL unreachable, Razorpay may still charge the customer but your server will return 400 and you won’t see logs.
+
+3. **Check server logs**  
+   When a webhook is received you should see:  
+   - `[webhook/razorpay] Event received: subscription.activated` (first payment success)  
+   - `[webhook/razorpay] Event received: subscription.charged` (each recurring charge)  
+   If these never appear, the webhook URL is not being hit (wrong URL, firewall, or not using HTTPS in production).
+
+4. **Razorpay plan and AutoPay**  
+   In Dashboard, ensure the **Plan** used (`RAZORPAY_PLAN_SERVICE` / `RAZORPAY_PLAN_SHOP`) is a **recurring** plan and that **Subscription / AutoPay** is enabled for your account.
+
+5. **Subscription status in DB**  
+   Check the `subscriptions` collection: after the first successful payment you should see `subscription_status: ACTIVE` and `start_date` / `expiry_date` set. If it stays `CREATED`, the first payment was never completed or the webhook never ran.

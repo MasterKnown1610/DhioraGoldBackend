@@ -23,6 +23,8 @@ function verifyRazorpayWebhookSignature(body, signature) {
 /**
  * @route   POST /api/webhook/razorpay
  * Must be called with raw body (no JSON parser). Verifies X-Razorpay-Signature.
+ * Subscription dates on User/Shop are updated ONLY here, after Razorpay confirms payment.
+ * Until these events run, the user must not get listing access (listing APIs use subscriptionEndDate).
  * Handles: subscription.activated, subscription.charged, payment.failed, subscription.cancelled
  */
 exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
@@ -30,11 +32,13 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
   const rawBody = req.body;
 
   if (!rawBody) {
+    console.error('[webhook/razorpay] Missing body');
     return res.status(400).json({ success: false, message: 'Missing body' });
   }
 
   const bodyString = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
   if (!verifyRazorpayWebhookSignature(bodyString, signature)) {
+    console.error('[webhook/razorpay] Invalid signature - check RAZORPAY_WEBHOOK_SECRET and Dashboard webhook URL');
     return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
   }
 
@@ -46,6 +50,7 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
   }
 
   const event = payload.event;
+  console.log('[webhook/razorpay] Event received:', event, payload.payload ? 'has payload' : 'no payload');
   if (!event) {
     return res.status(200).json({ received: true });
   }
@@ -55,6 +60,8 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
 
   switch (event) {
     case 'subscription.activated': {
+      // First payment confirmed; grant access only now (set subscription dates on User/Shop).
+      console.log('[webhook/razorpay] subscription.activated for:', payloadSubscription?.id);
       if (!payloadSubscription?.id) break;
       const sub = await Subscription.findOne({ razorpay_subscription_id: payloadSubscription.id });
       if (!sub) break;
@@ -78,10 +85,13 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
           subscriptionEndDate: expiry,
         });
       }
+      console.log('[webhook/razorpay] subscription.activated done, sub status ACTIVE');
       break;
     }
 
     case 'subscription.charged': {
+      // Recurring payment confirmed; extend access (update subscription dates on User/Shop).
+      console.log('[webhook/razorpay] subscription.charged sub:', payloadSubscription?.id, 'payment:', payloadPayment?.id, 'amount:', payloadPayment?.amount);
       if (!payloadSubscription?.id || !payloadPayment?.id) break;
       const sub = await Subscription.findOne({ razorpay_subscription_id: payloadSubscription.id });
       if (!sub) break;
@@ -116,10 +126,12 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
           subscriptionEndDate: currentExpiry,
         });
       }
+      console.log('[webhook/razorpay] subscription.charged done, expiry extended');
       break;
     }
 
     case 'payment.failed': {
+      console.log('[webhook/razorpay] payment.failed for subscription:', payload.payload?.payment?.entity?.subscription_id);
       const paymentEntity = payload.payload?.payment?.entity || payload.payload?.payment;
       if (!paymentEntity?.subscription_id) break;
       const sub = await Subscription.findOne({ razorpay_subscription_id: paymentEntity.subscription_id });
