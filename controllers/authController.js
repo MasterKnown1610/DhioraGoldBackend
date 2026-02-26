@@ -68,11 +68,7 @@ exports.register = asyncHandler(async (req, res) => {
     referredBy: referredBy || undefined,
   });
 
-  if (referredBy) {
-    await GlobalUser.findByIdAndUpdate(referredBy, {
-      $inc: { referralBalance: 1 },
-    });
-  }
+  // Referral points are awarded when the referred user pays (see webhookController: 1 pt for SERVICE, 5 pts for SHOP).
 
   const token = createToken(user._id);
   const referralCode = await ensureReferralCode(user);

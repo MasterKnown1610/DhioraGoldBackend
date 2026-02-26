@@ -9,6 +9,18 @@ const GlobalUser = require('../models/GlobalUser');
 const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
 const RENEWAL_DAYS = 30;
 
+/** Referral points: 1 for service provider (₹10), 5 for shop listing. Awarded when referred user's payment is confirmed. */
+const REFERRAL_POINTS_SERVICE = 1;
+const REFERRAL_POINTS_SHOP = 5;
+
+async function creditReferrerForPayment(globalUser, planType) {
+  if (!globalUser?.referredBy || !planType) return;
+  const points = planType === 'SERVICE' ? REFERRAL_POINTS_SERVICE : planType === 'SHOP' ? REFERRAL_POINTS_SHOP : 0;
+  if (points <= 0) return;
+  await GlobalUser.findByIdAndUpdate(globalUser.referredBy, { $inc: { referralBalance: points } });
+  console.log('[webhook/razorpay] Referral: credited', points, 'point(s) to referrer for', planType, 'payment');
+}
+
 function verifyRazorpayWebhookSignature(body, signature) {
   if (!RAZORPAY_WEBHOOK_SECRET || !signature) return false;
   const expected = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET).update(body).digest('hex');
@@ -85,6 +97,7 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
           subscriptionEndDate: expiry,
         });
       }
+      await creditReferrerForPayment(globalUser, sub.plan_type);
       console.log('[webhook/razorpay] subscription.activated done, sub status ACTIVE');
       break;
     }
@@ -126,6 +139,7 @@ exports.handleRazorpayWebhook = asyncHandler(async (req, res) => {
           subscriptionEndDate: currentExpiry,
         });
       }
+      // Referral points are awarded only on first payment (subscription.activated), not on recurring (subscription.charged).
       console.log('[webhook/razorpay] subscription.charged done, expiry extended');
       break;
     }
