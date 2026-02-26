@@ -51,6 +51,7 @@ const globalUserSchema = new mongoose.Schema(
     referralWithdrawalPhone: { type: String, trim: true, default: null },
     pendingUserSubscriptionEndDate: { type: Date, default: null },
     pendingShopSubscriptionEndDate: { type: Date, default: null },
+    razorpayCustomerId: { type: String, trim: true, default: null },
   },
   { timestamps: true }
 );

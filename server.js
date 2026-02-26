@@ -15,11 +15,16 @@ const admobRoutes = require('./routes/admobRoutes');
 const goldRoutes = require('./routes/goldRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const referralRoutes = require('./routes/referralRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 const path = require('path');
 
 connectDB();
 
 const app = express();
+
+// Webhook must receive raw body for Razorpay signature verification (mount before json parser)
+app.use('/api/webhook', express.raw({ type: 'application/json' }), webhookRoutes);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -33,6 +38,7 @@ app.use('/api/promotions', promotionRoutes);
 app.use('/api/admob', admobRoutes);
 app.use('/api/gold', goldRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/referral', referralRoutes);
 
 // Promotions admin UI (serve at /promotions-admin/)

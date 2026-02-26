@@ -6,6 +6,14 @@ const errorHandler = (err, req, res, next) => {
   let statusCode = res.statusCode !== 200 ? res.statusCode : 500;
   let message = err.message || 'Internal Server Error';
 
+  // Razorpay SDK throws { statusCode, error } (error may have .description or .reason)
+  if (err && typeof err === 'object' && err.statusCode && err.error != null) {
+    statusCode = err.statusCode >= 400 && err.statusCode < 600 ? err.statusCode : 502;
+    const e = err.error;
+    message =
+      (typeof e === 'object' && (e.description || e.reason)) || (typeof e === 'string' ? e : null) || message;
+  }
+
   // Mongoose validation error
   if (err.name === 'ValidationError') {
     statusCode = 400;
