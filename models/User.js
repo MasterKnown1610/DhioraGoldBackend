@@ -59,6 +59,13 @@ const userSchema = new mongoose.Schema(
       default: 'BASIC',
     },
     catalogEnabled: { type: Boolean, default: false },
+    catalogPlan: {
+      type: String,
+      enum: ['BASIC', 'PRO'],
+      default: 'BASIC',
+    },
+    catalogSubscriptionStartDate: { type: Date, default: null },
+    catalogSubscriptionEndDate: { type: Date, default: null },
     storageUsedMb: { type: Number, default: 0 },
     totalImages: { type: Number, default: 0 },
     status: {

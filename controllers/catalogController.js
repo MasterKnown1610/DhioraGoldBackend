@@ -6,7 +6,8 @@ const User = require('../models/User');
 const { uploadToCloudinary, deleteFromCloudinary, compressImage } = require('../middleware/upload');
 
 const PLAN_LIMITS = {
-  BASIC: { storageMb: 500, images: 100 },
+  BASIC: { storageMb: 500, images: 300 },
+  PRO: { storageMb: 2048, images: 1500 },
 };
 
 /**
@@ -36,17 +37,21 @@ const createCatalog = asyncHandler(async (req, res) => {
       .json({ success: false, message: 'No shop or service provider profile found' });
   }
 
-  if (!resolved.tenant.catalogEnabled) {
+  const tenant = resolved.tenant;
+  const now = new Date();
+  const isCatalogActive =
+    tenant.catalogEnabled && (!tenant.catalogSubscriptionEndDate || tenant.catalogSubscriptionEndDate >= now);
+  if (!isCatalogActive) {
     return res.status(403).json({
       success: false,
-      message: 'Catalog subscription required. Please activate your catalog plan to use this feature.',
-      code: 'CATALOG_NOT_ENABLED',
+      message: 'Catalog subscription inactive. Please activate or renew your catalog plan to use this feature.',
+      code: 'CATALOG_NOT_ACTIVE',
     });
   }
 
   const catalog = await Catalog.create({
     tenantType: resolved.tenantType,
-    tenantId: resolved.tenant._id,
+    tenantId: tenant._id,
     title: title.trim(),
     description: description?.trim() || null,
   });
@@ -71,6 +76,19 @@ const getMyCatalogs = asyncHandler(async (req, res) => {
   const orClauses = [];
   if (shop) orClauses.push({ tenantId: shop._id, tenantType: 'SHOP' });
   if (user) orClauses.push({ tenantId: user._id, tenantType: 'SERVICE_PROVIDER' });
+
+  const now = new Date();
+  const shopActive =
+    shop &&
+    shop.catalogEnabled &&
+    (!shop.catalogSubscriptionEndDate || shop.catalogSubscriptionEndDate >= now);
+  const userActive =
+    user &&
+    user.catalogEnabled &&
+    (!user.catalogSubscriptionEndDate || user.catalogSubscriptionEndDate >= now);
+  if (!shopActive && !userActive) {
+    return res.json({ success: true, data: [] });
+  }
 
   const catalogs = await Catalog.find({ $or: orClauses }).sort({ createdAt: -1 });
   res.json({ success: true, data: catalogs });
@@ -115,11 +133,15 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized to upload to this catalog' });
   }
 
-  if (!resolved.tenant.catalogEnabled) {
+  const tenant = resolved.tenant;
+  const now = new Date();
+  const isCatalogActive =
+    tenant.catalogEnabled && (!tenant.catalogSubscriptionEndDate || tenant.catalogSubscriptionEndDate >= now);
+  if (!isCatalogActive) {
     return res.status(403).json({
       success: false,
-      message: 'Catalog subscription required.',
-      code: 'CATALOG_NOT_ENABLED',
+      message: 'Catalog subscription inactive. Please activate or renew to upload images.',
+      code: 'CATALOG_NOT_ACTIVE',
     });
   }
 
@@ -136,8 +158,7 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
 
   const { compressedBuffer, sizeMb, originalSizeMb } = await processFile(req.file, quality);
 
-  const tenant = resolved.tenant;
-  const planLimits = PLAN_LIMITS[tenant.plan || 'BASIC'];
+  const planLimits = PLAN_LIMITS[tenant.catalogPlan || 'BASIC'] || PLAN_LIMITS.BASIC;
   const currentStorage = tenant.storageUsedMb || 0;
   const currentImages = tenant.totalImages || 0;
 
@@ -150,7 +171,7 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
   if (currentImages + 1 > planLimits.images) {
     return res.status(400).json({
       success: false,
-      message: `Image limit reached. Maximum ${planLimits.images} images allowed on ${tenant.plan || 'BASIC'} plan`,
+      message: `Image limit reached. Maximum ${planLimits.images} images allowed on ${tenant.catalogPlan || 'BASIC'} plan`,
     });
   }
 
@@ -193,11 +214,15 @@ const bulkUploadCatalogImages = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized to upload to this catalog' });
   }
 
-  if (!resolved.tenant.catalogEnabled) {
+  const tenant = resolved.tenant;
+  const now = new Date();
+  const isCatalogActive =
+    tenant.catalogEnabled && (!tenant.catalogSubscriptionEndDate || tenant.catalogSubscriptionEndDate >= now);
+  if (!isCatalogActive) {
     return res.status(403).json({
       success: false,
-      message: 'Catalog subscription required.',
-      code: 'CATALOG_NOT_ENABLED',
+      message: 'Catalog subscription inactive. Please activate or renew to upload images.',
+      code: 'CATALOG_NOT_ACTIVE',
     });
   }
 
@@ -228,8 +253,7 @@ const bulkUploadCatalogImages = asyncHandler(async (req, res) => {
   // Compress all files first so we know the real sizes before checking limits
   const processed = await Promise.all(files.map((f) => processFile(f, quality)));
 
-  const tenant = resolved.tenant;
-  const planLimits = PLAN_LIMITS[tenant.plan || 'BASIC'];
+  const planLimits = PLAN_LIMITS[tenant.catalogPlan || 'BASIC'] || PLAN_LIMITS.BASIC;
   let currentStorage = tenant.storageUsedMb || 0;
   let currentImages  = tenant.totalImages  || 0;
 
@@ -394,11 +418,22 @@ const getCatalogSubscriptionStatus = asyncHandler(async (req, res) => {
       .status(404)
       .json({ success: false, message: 'No shop or service provider profile found' });
   }
+  const tenant = resolved.tenant;
+  const now = new Date();
+  const planKey = tenant.catalogPlan || 'BASIC';
+  const planLimits = PLAN_LIMITS[planKey] || PLAN_LIMITS.BASIC;
+  const active =
+    tenant.catalogEnabled && (!tenant.catalogSubscriptionEndDate || tenant.catalogSubscriptionEndDate >= now);
   res.json({
     success: true,
     data: {
-      catalogEnabled: resolved.tenant.catalogEnabled || false,
-      plan: resolved.tenant.plan || 'BASIC',
+      catalogEnabled: !!active,
+      catalogPlan: planKey,
+      catalogSubscriptionEndDate: tenant.catalogSubscriptionEndDate || null,
+      storageUsedMb: tenant.storageUsedMb || 0,
+      storageLimitMb: planLimits.storageMb,
+      totalImages: tenant.totalImages || 0,
+      imagesLimit: planLimits.images,
     },
   });
 });
@@ -407,6 +442,68 @@ const getCatalogSubscriptionStatus = asyncHandler(async (req, res) => {
 const getAllCatalogsAdmin = asyncHandler(async (req, res) => {
   const catalogs = await Catalog.find({}).sort({ createdAt: -1 });
   res.json({ success: true, data: catalogs });
+});
+
+// PATCH /api/catalogs/admin/subscription — admin: manage catalog subscription for a tenant
+// Body: { tenantType: 'SHOP'|'SERVICE_PROVIDER', tenantId, catalogPlan?: 'BASIC'|'PRO', extendDays?: number, catalogEnabled?: boolean, catalogSubscriptionEndDate?: ISO string }
+const updateCatalogSubscriptionAdmin = asyncHandler(async (req, res) => {
+  const { tenantType, tenantId, catalogPlan, extendDays, catalogEnabled, catalogSubscriptionEndDate } = req.body || {};
+
+  const tt = String(tenantType || '').trim().toUpperCase();
+  if (!['SHOP', 'SERVICE_PROVIDER'].includes(tt)) {
+    return res.status(400).json({ success: false, message: 'tenantType must be SHOP or SERVICE_PROVIDER' });
+  }
+  if (!tenantId) {
+    return res.status(400).json({ success: false, message: 'tenantId is required' });
+  }
+
+  const plan = catalogPlan != null ? String(catalogPlan).trim().toUpperCase() : undefined;
+  if (plan != null && plan !== '' && !['BASIC', 'PRO'].includes(plan)) {
+    return res.status(400).json({ success: false, message: 'catalogPlan must be BASIC or PRO' });
+  }
+
+  const days = extendDays != null ? Number(extendDays) : null;
+  if (days != null && (!Number.isFinite(days) || days < 0)) {
+    return res.status(400).json({ success: false, message: 'extendDays must be a non-negative number' });
+  }
+
+  const explicitEnd =
+    catalogSubscriptionEndDate != null && String(catalogSubscriptionEndDate).trim() !== ''
+      ? new Date(catalogSubscriptionEndDate)
+      : null;
+  if (explicitEnd && isNaN(explicitEnd.getTime())) {
+    return res.status(400).json({ success: false, message: 'catalogSubscriptionEndDate must be a valid ISO date string' });
+  }
+
+  const Model = tt === 'SHOP' ? Shop : User;
+  const tenant = await Model.findById(tenantId);
+  if (!tenant) return res.status(404).json({ success: false, message: 'Tenant not found' });
+
+  const update = {};
+  if (typeof catalogEnabled === 'boolean') update.catalogEnabled = catalogEnabled;
+  if (plan) update.catalogPlan = plan;
+
+  if (explicitEnd) {
+    const now = new Date();
+    update.catalogSubscriptionStartDate = tenant.catalogSubscriptionStartDate || now;
+    update.catalogSubscriptionEndDate = explicitEnd;
+    update.catalogEnabled = true;
+  }
+
+  if (days != null) {
+    const now = new Date();
+    const currentEnd = tenant.catalogSubscriptionEndDate && tenant.catalogSubscriptionEndDate > now
+      ? tenant.catalogSubscriptionEndDate
+      : now;
+    const nextEnd = new Date(currentEnd);
+    nextEnd.setDate(nextEnd.getDate() + days);
+    update.catalogSubscriptionStartDate = tenant.catalogSubscriptionStartDate || now;
+    update.catalogSubscriptionEndDate = nextEnd;
+    update.catalogEnabled = true;
+  }
+
+  const updated = await Model.findByIdAndUpdate(tenantId, update, { new: true });
+  res.json({ success: true, data: updated });
 });
 
 module.exports = {
@@ -420,4 +517,5 @@ module.exports = {
   getCatalogImages,
   getAllCatalogsAdmin,
   getCatalogSubscriptionStatus,
+  updateCatalogSubscriptionAdmin,
 };

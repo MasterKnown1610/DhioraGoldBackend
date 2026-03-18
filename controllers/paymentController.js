@@ -11,7 +11,8 @@ const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 const USER_SUBSCRIPTION_AMOUNT_PAISE = 1000; // ₹10
 const SHOP_SUBSCRIPTION_AMOUNT_PAISE = 2500; // ₹25
-const CATALOG_SUBSCRIPTION_AMOUNT_PAISE = 9900; // ₹99
+const CATALOG_BASIC_AMOUNT_PAISE = 10000; // ₹100 / month
+const CATALOG_PRO_AMOUNT_PAISE = 29900; // ₹299 / month
 const SUBSCRIPTION_DAYS = 30;
 
 const getRazorpayInstance = () => {
@@ -34,7 +35,7 @@ exports.createOrder = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: 'Login required' });
   }
 
-  const { type } = req.body;
+  const { type, catalogPlan } = req.body;
   if (!type || !['user_subscription', 'shop_subscription', 'catalog_subscription'].includes(type)) {
     return res.status(400).json({
       success: false,
@@ -42,12 +43,26 @@ exports.createOrder = asyncHandler(async (req, res) => {
     });
   }
 
-  const amountMap = {
-    user_subscription: USER_SUBSCRIPTION_AMOUNT_PAISE,
-    shop_subscription: SHOP_SUBSCRIPTION_AMOUNT_PAISE,
-    catalog_subscription: CATALOG_SUBSCRIPTION_AMOUNT_PAISE,
-  };
-  const amount = amountMap[type];
+  let amount = null;
+  let normalizedCatalogPlan = null;
+
+  if (type === 'catalog_subscription') {
+    normalizedCatalogPlan = String(catalogPlan || '').trim().toUpperCase();
+    if (!['BASIC', 'PRO'].includes(normalizedCatalogPlan)) {
+      return res.status(400).json({
+        success: false,
+        message: 'catalogPlan must be BASIC or PRO for catalog_subscription',
+      });
+    }
+    amount = normalizedCatalogPlan === 'PRO' ? CATALOG_PRO_AMOUNT_PAISE : CATALOG_BASIC_AMOUNT_PAISE;
+  } else {
+    const amountMap = {
+      user_subscription: USER_SUBSCRIPTION_AMOUNT_PAISE,
+      shop_subscription: SHOP_SUBSCRIPTION_AMOUNT_PAISE,
+    };
+    amount = amountMap[type];
+  }
+
   const orderId = generateOrderId();
 
   const razorpay = getRazorpayInstance();
@@ -55,7 +70,7 @@ exports.createOrder = asyncHandler(async (req, res) => {
     amount,
     currency: 'INR',
     receipt: orderId,
-    notes: { type, orderId },
+    notes: { type, orderId, catalogPlan: normalizedCatalogPlan || undefined },
   });
 
   await Payment.create({
@@ -63,6 +78,7 @@ exports.createOrder = asyncHandler(async (req, res) => {
     razorpayOrderId: razorpayOrder.id,
     amount,
     type,
+    catalogPlan: normalizedCatalogPlan,
     globalUserRef: globalUser._id,
     userProfileRef: type === 'user_subscription' ? globalUser.userProfileRef : undefined,
     shopProfileRef: type === 'shop_subscription' ? globalUser.shopProfileRef : undefined,
@@ -170,11 +186,27 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
       await globalUser.save();
     }
   } else if (type === 'catalog_subscription') {
-    // Enable catalog on both shop and service provider profiles of this globalUser
+    // Monthly catalog subscription: enable + set plan + expiry on both profiles linked to this globalUser
     if (globalUser) {
       await Promise.all([
-        Shop.findOneAndUpdate({ globalUserRef: globalUser._id }, { catalogEnabled: true }),
-        User.findOneAndUpdate({ globalUserRef: globalUser._id }, { catalogEnabled: true }),
+        Shop.findOneAndUpdate(
+          { globalUserRef: globalUser._id },
+          {
+            catalogEnabled: true,
+            catalogPlan: paymentRecord.catalogPlan || 'BASIC',
+            catalogSubscriptionStartDate: now,
+            catalogSubscriptionEndDate: endDate,
+          }
+        ),
+        User.findOneAndUpdate(
+          { globalUserRef: globalUser._id },
+          {
+            catalogEnabled: true,
+            catalogPlan: paymentRecord.catalogPlan || 'BASIC',
+            catalogSubscriptionStartDate: now,
+            catalogSubscriptionEndDate: endDate,
+          }
+        ),
       ]);
     }
   }

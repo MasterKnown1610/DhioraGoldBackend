@@ -183,6 +183,20 @@
     .stat { display: inline-block; margin-right: 20px; font-size: 0.85rem; color: #a0a0a0; }
     .stat strong { color: #eee; }
     .no-price { color: #666; font-style: italic; font-size: 0.85rem; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 700; color: #a0a0a0; font-size: 0.85rem; }
+    input[type="date"] {
+      padding: 8px 12px;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      background: #0f0f23;
+      color: #eee;
+      font-size: 14px;
+    }
+    input[type="date"]:focus { outline: none; border-color: #F8C24D; }
+    .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+    .hint { color: #888; font-size: 12px; line-height: 18px; margin-top: 6px; }
+    .success-msg { color: #2ecc71; font-size: 13px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -219,11 +233,12 @@
               <th>Storage Used</th>
               <th>Images</th>
               <th>Plan</th>
+              <th>Expiry</th>
               <th style="text-align:right">Actions</th>
             </tr>
           </thead>
           <tbody id="catalogTableBody">
-            <tr><td colspan="7" class="empty">Loading…</td></tr>
+            <tr><td colspan="8" class="empty">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -241,9 +256,52 @@
     </div>
   </div>
 
+  <!-- Edit Subscription Modal -->
+  <div id="editSubModal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <h2>Catalog Subscription</h2>
+        <button class="close-btn" onclick="closeEditSub()">✕</button>
+      </div>
+
+      <div id="editSubMeta" style="color:#a0a0a0;font-size:13px;margin-bottom:14px"></div>
+
+      <div class="form-group">
+        <label for="editSubPlan">Plan</label>
+        <select id="editSubPlan" style="width:100%">
+          <option value="BASIC">BASIC</option>
+          <option value="PRO">PRO</option>
+        </select>
+        <div class="hint">BASIC: 500MB • 300 images · PRO: 2GB • 1500 images</div>
+      </div>
+
+      <div class="form-group">
+        <label for="editSubExpiry">Expiry date</label>
+        <select id="editSubExpiryPreset" style="width:100%" onchange="onExpiryPresetChange()">
+          <option value="30">30 days</option>
+          <option value="7">7 days</option>
+          <option value="90">90 days</option>
+          <option value="custom">Custom date</option>
+        </select>
+        <div style="height:10px"></div>
+        <input id="editSubExpiry" type="date" style="width:100%" disabled />
+        <div class="hint">Choose a preset or select a custom expiry date.</div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeEditSub()">Cancel</button>
+        <button id="editSubSaveBtn" onclick="saveEditSub()">Save</button>
+      </div>
+
+      <div id="editSubMsg" class="error-msg" style="display:none"></div>
+      <div id="editSubOk" class="success-msg" style="display:none"></div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = window.location.origin + '/api';
     let allCatalogs = [];
+    let editCtx = null; // { tenantType, tenantId, tenantName }
 
     async function loadCatalogs() {
       document.getElementById('catalogTableBody').innerHTML =
@@ -293,7 +351,7 @@
     function renderTable(catalogs) {
       if (!catalogs.length) {
         document.getElementById('catalogTableBody').innerHTML =
-          '<tr><td colspan="7" class="empty">No catalogs found.</td></tr>';
+          '<tr><td colspan="8" class="empty">No catalogs found.</td></tr>';
         return;
       }
 
@@ -307,9 +365,13 @@
         const typeLabel = c.tenantType === 'SHOP' ? 'Shop' : 'Service Provider';
         const storageMb = tenant ? (tenant.storageUsedMb || 0).toFixed(2) : '—';
         const images = tenant ? (tenant.totalImages || 0) : '—';
-        const plan = tenant ? (tenant.plan || 'BASIC') : '—';
-        const pct = tenant ? Math.min(((tenant.storageUsedMb || 0) / 500) * 100, 100) : 0;
+        const plan = tenant ? (tenant.catalogPlan || 'BASIC') : '—';
+        const limits = getPlanLimits(plan);
+        const pct = tenant ? Math.min(((tenant.storageUsedMb || 0) / (limits.storageMb || 500)) * 100, 100) : 0;
         const barClass = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
+        const expiry = tenant ? formatDate(getDefaultExpiry(tenant)) : '—';
+        const tenantId = tenant ? tenant._id : '';
+        const tenantType = tenant ? tenant._tenantType : c.tenantType;
 
         return `
           <tr>
@@ -327,8 +389,10 @@
             </td>
             <td>${images}</td>
             <td style="color:#F8C24D;font-size:0.85rem">${plan}</td>
+            <td>${expiry}</td>
             <td style="text-align:right">
               <button class="btn-secondary btn-sm" onclick="viewCatalog('${c._id}')">View Images</button>
+              ${tenantId ? `<button class="btn-secondary btn-sm" style="margin-left:8px" onclick="editCatalogSub('${tenantType}','${tenantId}')">Edit</button>` : ''}
             </td>
           </tr>
         `;
@@ -407,8 +471,149 @@
       document.getElementById('detailModal').classList.add('hidden');
     }
 
+    function getPlanLimits(plan) {
+      const p = String(plan || 'BASIC').toUpperCase();
+      if (p === 'PRO') return { storageMb: 2048, images: 1500 };
+      return { storageMb: 500, images: 300 };
+    }
+
+    function getDefaultExpiry(tenant) {
+      if (tenant && tenant.catalogSubscriptionEndDate) return tenant.catalogSubscriptionEndDate;
+      const now = new Date();
+      const d = new Date(now);
+      d.setDate(d.getDate() + 30);
+      return d;
+    }
+
+    function formatDate(dt) {
+      try {
+        return new Date(dt).toLocaleDateString('en-IN');
+      } catch {
+        return '—';
+      }
+    }
+
+    function openEditSub(tenantType, tenantId) {
+      const row = allCatalogs.find((c) => c._tenant && c._tenant._id === tenantId && (c._tenant._tenantType || c.tenantType) === tenantType);
+      const tenantName = row && row._tenant ? (row._tenant.shopName || row._tenant.userName || tenantId.slice(-6)) : tenantId.slice(-6);
+      const currentPlan = row && row._tenant ? (row._tenant.catalogPlan || 'BASIC') : 'BASIC';
+      const expiry = row && row._tenant ? getDefaultExpiry(row._tenant) : getDefaultExpiry(null);
+
+      editCtx = { tenantType, tenantId, tenantName };
+      document.getElementById('editSubMeta').textContent = `${tenantName} · ${tenantType}`;
+      document.getElementById('editSubPlan').value = String(currentPlan).toUpperCase();
+      document.getElementById('editSubExpiryPreset').value = '30';
+      document.getElementById('editSubExpiry').value = toDateInputValue(expiry);
+      document.getElementById('editSubExpiry').disabled = true;
+      onExpiryPresetChange();
+
+      hideEditMsgs();
+      document.getElementById('editSubModal').classList.remove('hidden');
+    }
+
+    function closeEditSub() {
+      document.getElementById('editSubModal').classList.add('hidden');
+      editCtx = null;
+      hideEditMsgs();
+    }
+
+    function hideEditMsgs() {
+      const err = document.getElementById('editSubMsg');
+      const ok = document.getElementById('editSubOk');
+      err.style.display = 'none';
+      ok.style.display = 'none';
+      err.textContent = '';
+      ok.textContent = '';
+    }
+
+    function toDateInputValue(dt) {
+      try {
+        const d = new Date(dt);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      } catch {
+        return '';
+      }
+    }
+
+    function addDaysToDateInput(days) {
+      const d = new Date();
+      d.setDate(d.getDate() + Number(days || 0));
+      return toDateInputValue(d);
+    }
+
+    function onExpiryPresetChange() {
+      const preset = document.getElementById('editSubExpiryPreset').value;
+      const dateInput = document.getElementById('editSubExpiry');
+      if (preset === 'custom') {
+        dateInput.disabled = false;
+        if (!dateInput.value) dateInput.value = toDateInputValue(getDefaultExpiry(null));
+        return;
+      }
+      dateInput.disabled = true;
+      dateInput.value = addDaysToDateInput(preset);
+    }
+
+    async function saveEditSub() {
+      hideEditMsgs();
+      if (!editCtx) return;
+
+      const btn = document.getElementById('editSubSaveBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        const plan = String(document.getElementById('editSubPlan').value || 'BASIC').trim().toUpperCase();
+        const preset = String(document.getElementById('editSubExpiryPreset').value || '30').trim();
+        const expiryVal = String(document.getElementById('editSubExpiry').value || '').trim(); // YYYY-MM-DD
+
+        const payload = {
+          tenantType: editCtx.tenantType,
+          tenantId: editCtx.tenantId,
+          catalogPlan: plan,
+        };
+
+        if (preset === 'custom') {
+          if (!expiryVal) throw new Error('Please select a custom expiry date');
+          payload.catalogSubscriptionEndDate = `${expiryVal}T00:00:00.000Z`;
+        } else {
+          payload.extendDays = Number(preset) || 30;
+        }
+
+        const res = await fetch(`${API_BASE}/catalogs/admin/subscription`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to update');
+        await loadCatalogs();
+        const ok = document.getElementById('editSubOk');
+        ok.textContent = 'Updated successfully';
+        ok.style.display = 'block';
+        setTimeout(() => closeEditSub(), 600);
+      } catch (e) {
+        const err = document.getElementById('editSubMsg');
+        err.textContent = e.message || 'Failed';
+        err.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save';
+      }
+    }
+
+    // Backward-compat name used by table button
+    function editCatalogSub(tenantType, tenantId) {
+      openEditSub(tenantType, tenantId);
+    }
+
     document.getElementById('detailModal').addEventListener('click', (e) => {
       if (e.target.id === 'detailModal') closeDetail();
+    });
+
+    document.getElementById('editSubModal').addEventListener('click', (e) => {
+      if (e.target.id === 'editSubModal') closeEditSub();
     });
 
     function escapeHtml(str) {

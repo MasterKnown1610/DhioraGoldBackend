@@ -11,10 +11,12 @@ const {
   getCatalogImages,
   getAllCatalogsAdmin,
   getCatalogSubscriptionStatus,
+  updateCatalogSubscriptionAdmin,
 } = require('../controllers/catalogController');
 
 // Admin: all catalogs
 router.get('/admin/all', getAllCatalogsAdmin);
+router.patch('/admin/subscription', updateCatalogSubscriptionAdmin);
 
 // Catalog subscription status
 router.get('/subscription-status', requireAuth, getCatalogSubscriptionStatus);
