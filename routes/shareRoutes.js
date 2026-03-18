@@ -9,7 +9,10 @@ const APP_STORE  = 'https://apps.apple.com/app/dhiora-gold/id6744494047';
 
 const html = ({ name, subtitle, address, imageUrl, type, id }) => {
   const deepLink  = `dhioragold://${type}/${id}`;
-  const intentUrl = `intent://${type}/${id}#Intent;scheme=dhioragold;package=com.goldapplive;S.browser_fallback_url=${encodeURIComponent(PLAY_STORE)};end`;
+  // Android: if app installed → opens it; if not → fallback_url brings user back to THIS page with ?napp=1 to skip re-redirect
+  const selfUrl   = `${BASE}/share/${type}/${id}`;
+  const intentUrl = `intent://${type}/${id}#Intent;scheme=dhioragold;package=com.goldapplive;S.browser_fallback_url=${encodeURIComponent(selfUrl + '?napp=1')};end`;
+
   const avatarHtml = imageUrl
     ? `<img src="${imageUrl}" class="avatar" alt="${name}" onerror="this.style.display='none'">`
     : `<div class="avatar-placeholder">${type === 'shop' ? '🏪' : '👤'}</div>`;
@@ -34,6 +37,7 @@ const html = ({ name, subtitle, address, imageUrl, type, id }) => {
     .name{font-size:22px;font-weight:800;color:#F8C24D;margin-bottom:6px;line-height:1.3}
     .subtitle{color:#bbb;font-size:14px;margin-bottom:6px}
     .address{color:#888;font-size:13px;margin-bottom:24px}
+    .hint{color:#666;font-size:12px;margin-bottom:20px;font-style:italic}
     .btn{display:block;width:100%;padding:14px;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px;margin-bottom:12px;cursor:pointer;transition:opacity .2s}
     .btn:hover{opacity:.88}
     .btn-app{background:#F8C24D;color:#000}
@@ -49,20 +53,48 @@ const html = ({ name, subtitle, address, imageUrl, type, id }) => {
     <div class="name">${name}</div>
     <div class="subtitle">${subtitle}</div>
     ${addrHtml}
-    <a href="${deepLink}" id="openBtn" class="btn btn-app">Open in Dhiora Gold App</a>
-    <div class="divider">— App not installed? —</div>
-    <a href="${PLAY_STORE}" class="btn btn-play">📱 Download on Play Store</a>
-    <a href="${APP_STORE}" class="btn btn-apple">🍎 Download on App Store</a>
+    <p class="hint" id="hint">Opening Dhiora Gold app…</p>
+    <a href="${deepLink}" id="openBtn" class="btn btn-app" style="display:none">Open in Dhiora Gold App</a>
+    <div id="storeSection" style="display:none">
+      <div class="divider">— Download the app to view full profile —</div>
+      <a href="${PLAY_STORE}" class="btn btn-play">📱 Download on Play Store</a>
+      <a href="${APP_STORE}" class="btn btn-apple">🍎 Download on App Store</a>
+    </div>
   </div>
   <script>
     var ua = navigator.userAgent || '';
-    var btn = document.getElementById('openBtn');
-    if (/Android/i.test(ua)) {
-      btn.href = "${intentUrl}";
-    } else if (/iPhone|iPad|iPod/i.test(ua)) {
-      btn.href = "${deepLink}";
-      // Try opening; if still here after 1.5s nothing happens (user uses store buttons)
-      setTimeout(function(){ window.location = "${deepLink}"; }, 300);
+    var isAndroid = /Android/i.test(ua);
+    var isIOS = /iPhone|iPad|iPod/i.test(ua);
+    var alreadyTried = /[?&]napp=1/.test(window.location.search);
+
+    function showFallback() {
+      document.getElementById('hint').style.display = 'none';
+      document.getElementById('openBtn').style.display = 'block';
+      document.getElementById('storeSection').style.display = 'block';
+    }
+
+    if (alreadyTried) {
+      // App not installed — show website view with download buttons
+      showFallback();
+    } else if (isAndroid) {
+      // intent:// — Chrome opens app if installed, else follows S.browser_fallback_url (this page + ?napp=1)
+      window.location.href = "${intentUrl}";
+      // For non-Chrome Android browsers that ignore intent://, show buttons after 2.5s
+      setTimeout(showFallback, 2500);
+    } else if (isIOS) {
+      // Silent iframe — no "Cannot Open Page" dialog
+      var iframe = document.createElement('iframe');
+      iframe.style.cssText = 'display:none;width:0;height:0;border:none';
+      iframe.src = "${deepLink}";
+      document.body.appendChild(iframe);
+      // If app opened, page goes to background. If not, show fallback after 1.5s.
+      var iosTimer = setTimeout(showFallback, 1500);
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) clearTimeout(iosTimer);
+      });
+    } else {
+      // Desktop — show buttons immediately
+      showFallback();
     }
   </script>
 </body>
