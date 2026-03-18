@@ -17,6 +17,8 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const referralRoutes = require('./routes/referralRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
+const catalogRoutes = require('./routes/catalogRoutes');
+const publicRoutes = require('./routes/publicRoutes');
 const path = require('path');
 
 connectDB();
@@ -40,6 +42,8 @@ app.use('/api/gold', goldRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/referral', referralRoutes);
+app.use('/api/catalogs', catalogRoutes);
+app.use('/api/public', publicRoutes);
 
 // Promotions admin UI (serve at /promotions-admin/)
 app.use('/promotions-admin', express.static(path.join(__dirname, 'website')));

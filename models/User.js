@@ -53,6 +53,14 @@ const userSchema = new mongoose.Schema(
     },
     subscriptionStartDate: { type: Date, default: null },
     subscriptionEndDate: { type: Date, default: null },
+    plan: {
+      type: String,
+      enum: ['BASIC'],
+      default: 'BASIC',
+    },
+    catalogEnabled: { type: Boolean, default: false },
+    storageUsedMb: { type: Number, default: 0 },
+    totalImages: { type: Number, default: 0 },
     status: {
       type: String,
       enum: ['active', 'inactive'],

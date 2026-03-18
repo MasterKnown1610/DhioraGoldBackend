@@ -11,6 +11,7 @@ const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 const USER_SUBSCRIPTION_AMOUNT_PAISE = 1000; // ₹10
 const SHOP_SUBSCRIPTION_AMOUNT_PAISE = 2500; // ₹25
+const CATALOG_SUBSCRIPTION_AMOUNT_PAISE = 9900; // ₹99
 const SUBSCRIPTION_DAYS = 30;
 
 const getRazorpayInstance = () => {
@@ -34,15 +35,19 @@ exports.createOrder = asyncHandler(async (req, res) => {
   }
 
   const { type } = req.body;
-  if (!type || !['user_subscription', 'shop_subscription'].includes(type)) {
+  if (!type || !['user_subscription', 'shop_subscription', 'catalog_subscription'].includes(type)) {
     return res.status(400).json({
       success: false,
-      message: 'type must be user_subscription or shop_subscription',
+      message: 'type must be user_subscription, shop_subscription, or catalog_subscription',
     });
   }
 
-  const amount =
-    type === 'user_subscription' ? USER_SUBSCRIPTION_AMOUNT_PAISE : SHOP_SUBSCRIPTION_AMOUNT_PAISE;
+  const amountMap = {
+    user_subscription: USER_SUBSCRIPTION_AMOUNT_PAISE,
+    shop_subscription: SHOP_SUBSCRIPTION_AMOUNT_PAISE,
+    catalog_subscription: CATALOG_SUBSCRIPTION_AMOUNT_PAISE,
+  };
+  const amount = amountMap[type];
   const orderId = generateOrderId();
 
   const razorpay = getRazorpayInstance();
@@ -100,10 +105,10 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
     });
   }
 
-  if (!['user_subscription', 'shop_subscription'].includes(type)) {
+  if (!['user_subscription', 'shop_subscription', 'catalog_subscription'].includes(type)) {
     return res.status(400).json({
       success: false,
-      message: 'type must be user_subscription or shop_subscription',
+      message: 'type must be user_subscription, shop_subscription, or catalog_subscription',
     });
   }
 
@@ -163,6 +168,14 @@ exports.verifyPayment = asyncHandler(async (req, res) => {
     } else if (globalUser) {
       globalUser.pendingShopSubscriptionEndDate = endDate;
       await globalUser.save();
+    }
+  } else if (type === 'catalog_subscription') {
+    // Enable catalog on both shop and service provider profiles of this globalUser
+    if (globalUser) {
+      await Promise.all([
+        Shop.findOneAndUpdate({ globalUserRef: globalUser._id }, { catalogEnabled: true }),
+        User.findOneAndUpdate({ globalUserRef: globalUser._id }, { catalogEnabled: true }),
+      ]);
     }
   }
 

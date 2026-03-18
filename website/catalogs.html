@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catalogs Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 24px;
+      width: 100%;
+      overflow-x: auto;
+    }
+    .container { width: 100%; max-width: 100%; margin: 0 auto; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    h1 { color: #F8C24D; font-size: 1.75rem; }
+    h2 { color: #F8C24D; font-size: 1.2rem; margin-bottom: 16px; }
+    nav { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    nav a { color: #a0a0a0; text-decoration: none; font-size: 14px; }
+    nav a.active { color: #F8C24D; }
+    nav a:hover { color: #F8C24D; }
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      overflow: visible;
+      margin-bottom: 20px;
+      width: 100%;
+    }
+    .card-body { padding: 20px; }
+    .table-wrap { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; min-width: 700px; border-collapse: collapse; }
+    th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+    th {
+      background: #0f0f23;
+      color: #a0a0a0;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    tr:last-child td { border-bottom: none; }
+    .id-col { color: #888; font-size: 0.9rem; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-shop { background: rgba(52,152,219,0.2); color: #3498db; }
+    .badge-sp { background: rgba(46,204,113,0.2); color: #2ecc71; }
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #a0a0a0;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .img-card {
+      background: #0f0f23;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #2a2a4a;
+    }
+    .img-card img {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      display: block;
+    }
+    .img-card-body { padding: 12px; }
+    .img-card-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+    .img-card-price { color: #F8C24D; font-weight: 700; font-size: 1rem; margin-bottom: 4px; }
+    .img-card-meta { color: #888; font-size: 0.75rem; }
+    .img-card-desc { color: #a0a0a0; font-size: 0.8rem; margin-top: 4px; }
+    .storage-bar-wrap { margin-bottom: 4px; }
+    .storage-bar-bg {
+      background: #0f0f23;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+      width: 200px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    .storage-bar-fill {
+      height: 100%;
+      background: #F8C24D;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .storage-bar-fill.warn { background: #e67e22; }
+    .storage-bar-fill.danger { background: #e74c3c; }
+    button {
+      background: #F8C24D;
+      color: #1a1a2e;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      background: #3a3a5c;
+      color: #eee;
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+    .btn-secondary:hover { background: #4a4a6c; }
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 780px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .modal-header h2 { margin: 0; }
+    .close-btn {
+      background: transparent;
+      color: #a0a0a0;
+      padding: 4px 8px;
+      font-size: 18px;
+    }
+    .close-btn:hover { color: #eee; }
+    .empty { text-align: center; padding: 32px; color: #888; }
+    .error-msg { color: #e74c3c; font-size: 13px; padding: 12px; }
+    .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+    input[type="text"], select {
+      padding: 8px 12px;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      background: #0f0f23;
+      color: #eee;
+      font-size: 14px;
+    }
+    input[type="text"]:focus, select:focus { outline: none; border-color: #F8C24D; }
+    .stat { display: inline-block; margin-right: 20px; font-size: 0.85rem; color: #a0a0a0; }
+    .stat strong { color: #eee; }
+    .no-price { color: #666; font-style: italic; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Catalogs Admin</h1>
+      <nav>
+        <a href="index.html">Promotions</a>
+        <a href="service-providers.html">Service Providers</a>
+        <a href="shops.html">Shops</a>
+        <a href="withdrawal-requests.html">Withdrawal Requests</a>
+        <a href="catalogs.html" class="active">Catalogs</a>
+      </nav>
+    </div>
+
+    <div class="filters">
+      <input type="text" id="searchInput" placeholder="Search by title or tenant…" style="width:240px" oninput="filterCatalogs()">
+      <select id="typeFilter" onchange="filterCatalogs()">
+        <option value="">All Types</option>
+        <option value="SHOP">Shop</option>
+        <option value="SERVICE_PROVIDER">Service Provider</option>
+      </select>
+      <button class="btn-secondary btn-sm" onclick="loadCatalogs()">Refresh</button>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Type</th>
+              <th>Storage Used</th>
+              <th>Images</th>
+              <th>Plan</th>
+              <th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="catalogTableBody">
+            <tr><td colspan="7" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="detailTitle">Catalog Detail</h2>
+        <button class="close-btn" onclick="closeDetail()">✕</button>
+      </div>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api';
+    let allCatalogs = [];
+
+    async function loadCatalogs() {
+      document.getElementById('catalogTableBody').innerHTML =
+        '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+
+      try {
+        // Fetch all catalogs — uses the admin/public endpoint by loading each tenant's catalogs
+        // Since there's no single admin "all catalogs" endpoint, we call the admin shops+users
+        // and then fetch catalogs per tenant. For now, we display a combined view.
+        const [shopsRes, usersRes] = await Promise.all([
+          fetch(`${API_BASE}/shops/all`),
+          fetch(`${API_BASE}/users/all`),
+        ]);
+        const shopsData = await shopsRes.json();
+        const usersData = await usersRes.json();
+
+        const tenants = [
+          ...(shopsData.data || []).map((s) => ({ ...s, _tenantType: 'SHOP' })),
+          ...(usersData.data || []).map((u) => ({ ...u, _tenantType: 'SERVICE_PROVIDER' })),
+        ];
+
+        // Fetch catalogs for each tenant via public endpoint isn't ideal;
+        // instead we call the admin catalog list endpoint
+        const catalogRes = await fetch(`${API_BASE}/catalogs/admin/all`);
+        let catalogs = [];
+        if (catalogRes.ok) {
+          const catalogData = await catalogRes.json();
+          catalogs = catalogData.data || [];
+        }
+
+        // Build tenant lookup map
+        const tenantMap = {};
+        tenants.forEach((t) => { tenantMap[t._id] = t; });
+
+        allCatalogs = catalogs.map((c) => ({
+          ...c,
+          _tenant: tenantMap[c.tenantId] || null,
+        }));
+
+        renderTable(allCatalogs);
+      } catch (err) {
+        document.getElementById('catalogTableBody').innerHTML =
+          `<tr><td colspan="7" class="error-msg">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderTable(catalogs) {
+      if (!catalogs.length) {
+        document.getElementById('catalogTableBody').innerHTML =
+          '<tr><td colspan="7" class="empty">No catalogs found.</td></tr>';
+        return;
+      }
+
+      document.getElementById('catalogTableBody').innerHTML = catalogs.map((c, i) => {
+        const shortId = (c._id || '').slice(-6);
+        const tenant = c._tenant;
+        const tenantName = tenant
+          ? (tenant.shopName || tenant.userName || '—')
+          : c.tenantId?.slice(-6) || '—';
+        const typeClass = c.tenantType === 'SHOP' ? 'badge-shop' : 'badge-sp';
+        const typeLabel = c.tenantType === 'SHOP' ? 'Shop' : 'Service Provider';
+        const storageMb = tenant ? (tenant.storageUsedMb || 0).toFixed(2) : '—';
+        const images = tenant ? (tenant.totalImages || 0) : '—';
+        const plan = tenant ? (tenant.plan || 'BASIC') : '—';
+        const pct = tenant ? Math.min(((tenant.storageUsedMb || 0) / 500) * 100, 100) : 0;
+        const barClass = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
+
+        return `
+          <tr>
+            <td class="id-col">${shortId}</td>
+            <td>
+              <div style="font-weight:600">${escapeHtml(c.title)}</div>
+              <div style="color:#888;font-size:0.8rem">${escapeHtml(tenantName)}</div>
+            </td>
+            <td><span class="badge ${typeClass}">${typeLabel}</span></td>
+            <td>
+              <div class="storage-bar-wrap">
+                <span class="storage-bar-bg"><span class="storage-bar-fill ${barClass}" style="width:${pct}%"></span></span>
+                <span style="font-size:0.8rem">${storageMb} MB</span>
+              </div>
+            </td>
+            <td>${images}</td>
+            <td style="color:#F8C24D;font-size:0.85rem">${plan}</td>
+            <td style="text-align:right">
+              <button class="btn-secondary btn-sm" onclick="viewCatalog('${c._id}')">View Images</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterCatalogs() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const type = document.getElementById('typeFilter').value;
+      const filtered = allCatalogs.filter((c) => {
+        const tenantName = c._tenant
+          ? (c._tenant.shopName || c._tenant.userName || '').toLowerCase()
+          : '';
+        const titleMatch = c.title.toLowerCase().includes(search) || tenantName.includes(search);
+        const typeMatch = !type || c.tenantType === type;
+        return titleMatch && typeMatch;
+      });
+      renderTable(filtered);
+    }
+
+    async function viewCatalog(catalogId) {
+      document.getElementById('detailContent').innerHTML = '<p style="color:#888;padding:20px">Loading images…</p>';
+      document.getElementById('detailModal').classList.remove('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/public/catalogs/${catalogId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to load');
+
+        const { catalog, images } = data.data;
+        document.getElementById('detailTitle').textContent = catalog.title;
+
+        if (!images.length) {
+          document.getElementById('detailContent').innerHTML =
+            `<p class="empty">No images in this catalog.</p>
+             ${catalog.description ? `<p style="color:#a0a0a0;font-size:0.9rem;margin-top:8px">${escapeHtml(catalog.description)}</p>` : ''}`;
+          return;
+        }
+
+        const totalPrice = images
+          .filter((img) => img.price != null)
+          .reduce((sum, img) => sum + img.price, 0);
+
+        document.getElementById('detailContent').innerHTML = `
+          ${catalog.description
+            ? `<p style="color:#a0a0a0;font-size:0.9rem;margin-bottom:16px">${escapeHtml(catalog.description)}</p>`
+            : ''}
+          <div style="margin-bottom:16px">
+            <span class="stat"><strong>${images.length}</strong> images</span>
+            <span class="stat">Total storage: <strong>${images.reduce((s, i) => s + i.sizeMb, 0).toFixed(2)} MB</strong></span>
+            ${images.some((i) => i.price != null) ? `<span class="stat">Listed value: <strong>₹${totalPrice.toLocaleString('en-IN')}</strong></span>` : ''}
+          </div>
+          <div class="grid">
+            ${images.map((img) => `
+              <div class="img-card">
+                <img src="${escapeHtml(img.imageUrl)}" alt="${escapeHtml(img.title || '')}" loading="lazy" onerror="this.style.display='none'">
+                <div class="img-card-body">
+                  ${img.title ? `<div class="img-card-title">${escapeHtml(img.title)}</div>` : ''}
+                  ${img.price != null
+                    ? `<div class="img-card-price">₹${Number(img.price).toLocaleString('en-IN')}</div>`
+                    : `<div class="no-price">No price set</div>`}
+                  ${img.description ? `<div class="img-card-desc">${escapeHtml(img.description)}</div>` : ''}
+                  <div class="img-card-meta">${img.sizeMb.toFixed(3)} MB · ${new Date(img.createdAt).toLocaleDateString('en-IN')}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (err) {
+        document.getElementById('detailContent').innerHTML =
+          `<p class="error-msg">${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function closeDetail() {
+      document.getElementById('detailModal').classList.add('hidden');
+    }
+
+    document.getElementById('detailModal').addEventListener('click', (e) => {
+      if (e.target.id === 'detailModal') closeDetail();
+    });
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    loadCatalogs();
+  </script>
+</body>
+</html>

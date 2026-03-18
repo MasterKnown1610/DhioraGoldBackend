@@ -1,5 +1,36 @@
 const multer = require('multer');
+const sharp = require('sharp');
 const cloudinary = require('../config/cloudinary');
+
+/**
+ * Quality presets for catalog image compression.
+ *
+ * standard — max 1280px, JPEG q72   → ~0.1–0.25 MB per image (big phone photos shrink ~95%)
+ * hd       — max 2560px, JPEG q90   → ~0.5–1.5 MB per image (preserves fine detail)
+ */
+const IMAGE_QUALITY_PRESETS = {
+  standard: { maxDimension: 1280, quality: 72 },
+  hd:       { maxDimension: 2560, quality: 90 },
+};
+
+/**
+ * Compress an image buffer using sharp.
+ * Always outputs JPEG for consistent sizing.
+ *
+ * @param {Buffer} buffer - Raw image buffer from multer
+ * @param {'standard'|'hd'} quality - Quality preset
+ * @returns {Promise<Buffer>} Compressed JPEG buffer
+ */
+const compressImage = async (buffer, quality = 'standard') => {
+  const preset = IMAGE_QUALITY_PRESETS[quality] || IMAGE_QUALITY_PRESETS.standard;
+  return sharp(buffer)
+    .resize(preset.maxDimension, preset.maxDimension, {
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: preset.quality })
+    .toBuffer();
+};
 
 // In-memory storage for multer (files will be sent to Cloudinary in controller)
 const memoryStorage = multer.memoryStorage();
@@ -62,10 +93,18 @@ const uploadSingle = upload.single('image');
  */
 const uploadMultiple = upload.array('images', 5);
 
+/**
+ * Multer: up to 10 files for catalog bulk upload
+ */
+const uploadCatalogBulk = upload.array('images', 10);
+
 module.exports = {
   upload,
   uploadSingle,
   uploadMultiple,
+  uploadCatalogBulk,
   uploadToCloudinary,
   deleteFromCloudinary,
+  compressImage,
+  IMAGE_QUALITY_PRESETS,
 };

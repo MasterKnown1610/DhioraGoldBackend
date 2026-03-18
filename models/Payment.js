@@ -9,7 +9,7 @@ const paymentSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ['user_subscription', 'shop_subscription', 'referral_refund'],
+      enum: ['user_subscription', 'shop_subscription', 'catalog_subscription', 'referral_refund'],
     },
     globalUserRef: { type: mongoose.Schema.Types.ObjectId, ref: 'GlobalUser', default: null },
     userProfileRef: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
