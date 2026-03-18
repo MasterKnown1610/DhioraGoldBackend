@@ -19,6 +19,7 @@ const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
 const catalogRoutes = require('./routes/catalogRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const shareRoutes = require('./routes/shareRoutes');
 const path = require('path');
 
 connectDB();
@@ -44,6 +45,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/catalogs', catalogRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/share', shareRoutes);
 
 // Promotions admin UI (serve at /promotions-admin/)
 app.use('/promotions-admin', express.static(path.join(__dirname, 'website')));
