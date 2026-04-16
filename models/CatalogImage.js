@@ -39,6 +39,27 @@ const catalogImageSchema = new mongoose.Schema(
       enum: ['standard', 'hd'],
       default: 'standard',
     },
+    category: {
+      type: String,
+      enum: [
+        'ring',
+        'chain',
+        'haram',
+        'necklace',
+        'bangle',
+        'bracelet',
+        'earring',
+        'pendant',
+        'anklet',
+        'nose_pin',
+        'mangalsutra',
+        'waist_belt',
+        'brooch',
+        'coin',
+        'other',
+      ],
+      default: 'other',
+    },
   },
   { timestamps: true }
 );

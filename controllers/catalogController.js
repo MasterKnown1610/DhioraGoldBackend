@@ -10,6 +10,33 @@ const PLAN_LIMITS = {
   PRO: { storageMb: 2048, images: 1500 },
 };
 
+const ITEM_CATEGORIES = [
+  'ring',
+  'chain',
+  'haram',
+  'necklace',
+  'bangle',
+  'bracelet',
+  'earring',
+  'pendant',
+  'anklet',
+  'nose_pin',
+  'mangalsutra',
+  'waist_belt',
+  'brooch',
+  'coin',
+  'other',
+];
+
+const normalizeCategory = (category) => {
+  if (category == null || String(category).trim() === '') return 'other';
+  const value = String(category).trim().toLowerCase().replace(/\s+/g, '_');
+  if (!ITEM_CATEGORIES.includes(value)) {
+    throw new Error(`Invalid category "${category}". Allowed: ${ITEM_CATEGORIES.join(', ')}`);
+  }
+  return value;
+};
+
 /**
  * Resolve the Shop or User profile for the authenticated GlobalUser.
  * Returns { tenant, tenantType, TenantModel } or null.
@@ -117,7 +144,7 @@ const processFile = async (file, quality) => {
 // POST /api/catalogs/:catalogId/images  (single upload)
 const uploadCatalogImage = asyncHandler(async (req, res) => {
   const { catalogId } = req.params;
-  const { title, description, price, quality = 'standard' } = req.body;
+  const { title, description, price, quality = 'standard', category } = req.body;
 
   if (!['standard', 'hd'].includes(quality)) {
     return res.status(400).json({ success: false, message: 'quality must be "standard" or "hd"' });
@@ -150,8 +177,10 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
   }
 
   let parsedPrice;
+  let parsedCategory;
   try {
     parsedPrice = parsePrice(price);
+    parsedCategory = normalizeCategory(category);
   } catch (e) {
     return res.status(400).json({ success: false, message: e.message });
   }
@@ -183,6 +212,7 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
     title: title?.trim() || null,
     description: description?.trim() || null,
     price: parsedPrice,
+    category: parsedCategory,
     sizeMb,
     originalSizeMb,
     quality,
@@ -239,12 +269,15 @@ const bulkUploadCatalogImages = asyncHandler(async (req, res) => {
   const titles       = toArray(req.body.titles);
   const descriptions = toArray(req.body.descriptions);
   const prices       = toArray(req.body.prices);
+  const categories   = toArray(req.body.categories);
 
   // Validate all prices upfront before touching Cloudinary
   const parsedPrices = [];
+  const parsedCategories = [];
   for (let i = 0; i < files.length; i++) {
     try {
       parsedPrices.push(parsePrice(prices[i]));
+      parsedCategories.push(normalizeCategory(categories[i]));
     } catch (e) {
       return res.status(400).json({ success: false, message: `Image ${i + 1}: ${e.message}` });
     }
@@ -287,6 +320,7 @@ const bulkUploadCatalogImages = asyncHandler(async (req, res) => {
       title:        titles[i]?.trim()       || null,
       description:  descriptions[i]?.trim() || null,
       price:        parsedPrices[i],
+      category:     parsedCategories[i],
       sizeMb,
       originalSizeMb,
       quality,
@@ -354,6 +388,88 @@ const getPublicCatalog = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: { catalog, images },
+  });
+});
+
+// GET /api/public/catalog-items?category=ring&tenantType=SHOP|SERVICE_PROVIDER&tenantId=<id>&catalogId=<id>&limit=50&page=1
+// Returns catalog items with category filter + catalog + seller details.
+const getPublicCatalogItems = asyncHandler(async (req, res) => {
+  const { category, tenantType, tenantId, catalogId, page = 1, limit = 50 } = req.query;
+
+  const parsedPage = Math.max(1, Number(page) || 1);
+  const parsedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+
+  const catalogFilter = {};
+  if (catalogId) catalogFilter._id = catalogId;
+  if (tenantId) catalogFilter.tenantId = tenantId;
+  if (tenantType) catalogFilter.tenantType = String(tenantType).trim().toUpperCase();
+
+  const catalogs = await Catalog.find(catalogFilter).sort({ createdAt: -1 });
+  if (!catalogs.length) {
+    return res.json({
+      success: true,
+      data: { items: [], page: parsedPage, limit: parsedLimit, total: 0, categories: ITEM_CATEGORIES },
+    });
+  }
+
+  const catalogIds = catalogs.map((c) => c._id);
+  const imageFilter = { catalogId: { $in: catalogIds } };
+  if (category) imageFilter.category = normalizeCategory(category);
+
+  const [total, images] = await Promise.all([
+    CatalogImage.countDocuments(imageFilter),
+    CatalogImage.find(imageFilter)
+      .sort({ createdAt: -1 })
+      .skip((parsedPage - 1) * parsedLimit)
+      .limit(parsedLimit),
+  ]);
+
+  const catalogMap = new Map(catalogs.map((c) => [String(c._id), c]));
+  const shopIds = catalogs.filter((c) => c.tenantType === 'SHOP').map((c) => c.tenantId);
+  const userIds = catalogs.filter((c) => c.tenantType === 'SERVICE_PROVIDER').map((c) => c.tenantId);
+
+  const [shops, users] = await Promise.all([
+    shopIds.length ? Shop.find({ _id: { $in: shopIds } }) : [],
+    userIds.length ? User.find({ _id: { $in: userIds } }) : [],
+  ]);
+
+  const shopMap = new Map(shops.map((s) => [String(s._id), s]));
+  const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+  const items = images.map((img) => {
+    const catalog = catalogMap.get(String(img.catalogId));
+    const seller =
+      catalog?.tenantType === 'SHOP'
+        ? shopMap.get(String(catalog.tenantId))
+        : userMap.get(String(catalog?.tenantId));
+
+    return {
+      item: img,
+      catalog: catalog || null,
+      seller: seller
+        ? {
+            _id: seller._id,
+            type: catalog.tenantType,
+            name: seller.shopName || seller.userName || seller.name || null,
+            phoneNumber: seller.phoneNumber || null,
+            whatsappNumber: seller.whatsappNumber || null,
+            state: seller.state || null,
+            district: seller.district || null,
+            address: seller.address || null,
+          }
+        : null,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      page: parsedPage,
+      limit: parsedLimit,
+      total,
+      categories: ITEM_CATEGORIES,
+    },
   });
 });
 
@@ -518,4 +634,5 @@ module.exports = {
   getAllCatalogsAdmin,
   getCatalogSubscriptionStatus,
   updateCatalogSubscriptionAdmin,
+  getPublicCatalogItems,
 };
