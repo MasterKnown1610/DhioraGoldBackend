@@ -28,13 +28,43 @@ const ITEM_CATEGORIES = [
   'other',
 ];
 
+const METAL_TYPES = ['gold', 'silver'];
+
 const normalizeCategory = (category) => {
-  if (category == null || String(category).trim() === '') return 'other';
-  const value = String(category).trim().toLowerCase().replace(/\s+/g, '_');
+  const raw = Array.isArray(category) ? category[0] : category;
+  if (raw == null || String(raw).trim() === '') return 'other';
+  const value = String(raw).trim().toLowerCase().replace(/\s+/g, '_');
   if (!ITEM_CATEGORIES.includes(value)) {
-    throw new Error(`Invalid category "${category}". Allowed: ${ITEM_CATEGORIES.join(', ')}`);
+    throw new Error(`Invalid category "${raw}". Allowed: ${ITEM_CATEGORIES.join(', ')}`);
   }
   return value;
+};
+
+const normalizeMetalType = (metal) => {
+  if (metal == null || String(metal).trim() === '') return 'gold';
+  const raw = Array.isArray(metal) ? metal[0] : metal;
+  const value = String(raw).trim().toLowerCase();
+  if (!METAL_TYPES.includes(value)) {
+    throw new Error(`Invalid metal type "${metal}". Allowed: ${METAL_TYPES.join(', ')}`);
+  }
+  return value;
+};
+
+/** Multipart may send a string, or duplicate keys may become an array — use first scalar. */
+const firstScalar = (val) => {
+  if (val === undefined || val === null) return undefined;
+  if (Array.isArray(val)) return val[0];
+  return val;
+};
+
+const parseGrams = (gramsVal) => {
+  const raw = firstScalar(gramsVal);
+  if (raw === undefined || raw === null || raw === '') return null;
+  const s = String(raw).trim().replace(',', '.');
+  if (s === '') return null;
+  const n = Number(s);
+  if (isNaN(n) || n < 0) throw new Error('Grams must be a non-negative number');
+  return n;
 };
 
 /**
@@ -125,8 +155,9 @@ const getMyCatalogs = asyncHandler(async (req, res) => {
  * Validate and parse a price field. Returns null if empty, throws on invalid.
  */
 const parsePrice = (priceVal) => {
-  if (priceVal === undefined || priceVal === null || priceVal === '') return null;
-  const n = Number(priceVal);
+  const raw = firstScalar(priceVal);
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number(raw);
   if (isNaN(n) || n < 0) throw new Error('Price must be a non-negative number');
   return n;
 };
@@ -144,7 +175,16 @@ const processFile = async (file, quality) => {
 // POST /api/catalogs/:catalogId/images  (single upload)
 const uploadCatalogImage = asyncHandler(async (req, res) => {
   const { catalogId } = req.params;
-  const { title, description, price, quality = 'standard', category } = req.body;
+  const title = firstScalar(req.body.title);
+  const description = firstScalar(req.body.description);
+  const category = firstScalar(req.body.category);
+  const metalType = firstScalar(req.body.metalType);
+  const grams = firstScalar(req.body.grams);
+  const qualityRaw = firstScalar(req.body.quality);
+  const quality =
+    qualityRaw != null && String(qualityRaw).trim() !== ''
+      ? String(qualityRaw).trim()
+      : 'standard';
 
   if (!['standard', 'hd'].includes(quality)) {
     return res.status(400).json({ success: false, message: 'quality must be "standard" or "hd"' });
@@ -178,9 +218,13 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
 
   let parsedPrice;
   let parsedCategory;
+  let parsedMetal;
+  let parsedGrams;
   try {
-    parsedPrice = parsePrice(price);
+    parsedPrice = parsePrice(req.body.price);
     parsedCategory = normalizeCategory(category);
+    parsedMetal = normalizeMetalType(metalType);
+    parsedGrams = parseGrams(grams);
   } catch (e) {
     return res.status(400).json({ success: false, message: e.message });
   }
@@ -209,10 +253,12 @@ const uploadCatalogImage = asyncHandler(async (req, res) => {
   const catalogImage = await CatalogImage.create({
     catalogId: catalog._id,
     imageUrl,
-    title: title?.trim() || null,
-    description: description?.trim() || null,
+    title: title != null && String(title).trim() !== '' ? String(title).trim() : null,
+    description: description != null && String(description).trim() !== '' ? String(description).trim() : null,
     price: parsedPrice,
     category: parsedCategory,
+    metalType: parsedMetal,
+    grams: parsedGrams,
     sizeMb,
     originalSizeMb,
     quality,
@@ -270,14 +316,20 @@ const bulkUploadCatalogImages = asyncHandler(async (req, res) => {
   const descriptions = toArray(req.body.descriptions);
   const prices       = toArray(req.body.prices);
   const categories   = toArray(req.body.categories);
+  const metalTypes   = toArray(req.body.metalTypes);
+  const gramsList    = toArray(req.body.grams);
 
   // Validate all prices upfront before touching Cloudinary
   const parsedPrices = [];
   const parsedCategories = [];
+  const parsedMetalTypes = [];
+  const parsedGramsList = [];
   for (let i = 0; i < files.length; i++) {
     try {
       parsedPrices.push(parsePrice(prices[i]));
       parsedCategories.push(normalizeCategory(categories[i]));
+      parsedMetalTypes.push(normalizeMetalType(metalTypes[i]));
+      parsedGramsList.push(parseGrams(gramsList[i]));
     } catch (e) {
       return res.status(400).json({ success: false, message: `Image ${i + 1}: ${e.message}` });
     }
@@ -321,6 +373,8 @@ const bulkUploadCatalogImages = asyncHandler(async (req, res) => {
       description:  descriptions[i]?.trim() || null,
       price:        parsedPrices[i],
       category:     parsedCategories[i],
+      metalType:    parsedMetalTypes[i],
+      grams:        parsedGramsList[i],
       sizeMb,
       originalSizeMb,
       quality,
@@ -391,10 +445,11 @@ const getPublicCatalog = asyncHandler(async (req, res) => {
   });
 });
 
-// GET /api/public/catalog-items?category=ring&tenantType=SHOP|SERVICE_PROVIDER&tenantId=<id>&catalogId=<id>&limit=50&page=1
-// Returns catalog items with category filter + catalog + seller details.
+// GET /api/public/catalog-items?category=ring&metalType=gold|silver&minGrams=&maxGrams=&tenantType=SHOP|SERVICE_PROVIDER&tenantId=<id>&catalogId=<id>&limit=50&page=1
+// Returns catalog items with filters + catalog + seller details.
 const getPublicCatalogItems = asyncHandler(async (req, res) => {
-  const { category, tenantType, tenantId, catalogId, page = 1, limit = 50 } = req.query;
+  const { category, metalType, minGrams, maxGrams, tenantType, tenantId, catalogId, page = 1, limit = 50 } =
+    req.query;
 
   const parsedPage = Math.max(1, Number(page) || 1);
   const parsedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
@@ -408,13 +463,59 @@ const getPublicCatalogItems = asyncHandler(async (req, res) => {
   if (!catalogs.length) {
     return res.json({
       success: true,
-      data: { items: [], page: parsedPage, limit: parsedLimit, total: 0, categories: ITEM_CATEGORIES },
+      data: {
+        items: [],
+        page: parsedPage,
+        limit: parsedLimit,
+        total: 0,
+        categories: ITEM_CATEGORIES,
+        metalTypes: METAL_TYPES,
+      },
     });
   }
 
   const catalogIds = catalogs.map((c) => c._id);
   const imageFilter = { catalogId: { $in: catalogIds } };
-  if (category) imageFilter.category = normalizeCategory(category);
+
+  if (category && String(category).trim() !== '') {
+    try {
+      imageFilter.category = normalizeCategory(category);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: e.message });
+    }
+  }
+
+  if (metalType && String(metalType).trim() !== '' && String(metalType).toLowerCase() !== 'all') {
+    try {
+      imageFilter.metalType = normalizeMetalType(metalType);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: e.message });
+    }
+  }
+
+  const minG =
+    minGrams !== undefined && minGrams !== null && String(minGrams).trim() !== ''
+      ? Number(minGrams)
+      : null;
+  const maxG =
+    maxGrams !== undefined && maxGrams !== null && String(maxGrams).trim() !== ''
+      ? Number(maxGrams)
+      : null;
+  if (minG != null || maxG != null) {
+    imageFilter.grams = {};
+    if (minG != null) {
+      if (isNaN(minG) || minG < 0) {
+        return res.status(400).json({ success: false, message: 'minGrams must be a non-negative number' });
+      }
+      imageFilter.grams.$gte = minG;
+    }
+    if (maxG != null) {
+      if (isNaN(maxG) || maxG < 0) {
+        return res.status(400).json({ success: false, message: 'maxGrams must be a non-negative number' });
+      }
+      imageFilter.grams.$lte = maxG;
+    }
+  }
 
   const [total, images] = await Promise.all([
     CatalogImage.countDocuments(imageFilter),
@@ -469,6 +570,152 @@ const getPublicCatalogItems = asyncHandler(async (req, res) => {
       limit: parsedLimit,
       total,
       categories: ITEM_CATEGORIES,
+      metalTypes: METAL_TYPES,
+    },
+  });
+});
+
+/** Catalogs whose tenant has an active catalog subscription (Shift Ecommerce marketplace). */
+const getCatalogsForActiveSubscriptions = async () => {
+  const now = new Date();
+  const tenantQuery = {
+    catalogEnabled: true,
+    $or: [
+      { catalogSubscriptionEndDate: null },
+      { catalogSubscriptionEndDate: { $exists: false } },
+      { catalogSubscriptionEndDate: { $gte: now } },
+    ],
+  };
+  const [shops, users] = await Promise.all([
+    Shop.find(tenantQuery).select('_id'),
+    User.find(tenantQuery).select('_id'),
+  ]);
+  const or = [];
+  shops.forEach((s) => or.push({ tenantType: 'SHOP', tenantId: s._id }));
+  users.forEach((u) => or.push({ tenantType: 'SERVICE_PROVIDER', tenantId: u._id }));
+  if (!or.length) return [];
+  return Catalog.find({ $or: or }).sort({ createdAt: -1 });
+};
+
+// GET /api/public/market/items (alias: /shift-ecommerce/items) — same filters as /catalog-items but only active catalog tenants
+const getShiftEcommerceItems = asyncHandler(async (req, res) => {
+  const { category, metalType, minGrams, maxGrams, page = 1, limit = 50 } = req.query;
+
+  const parsedPage = Math.max(1, Number(page) || 1);
+  const parsedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+
+  const catalogs = await getCatalogsForActiveSubscriptions();
+  if (!catalogs.length) {
+    return res.json({
+      success: true,
+      data: {
+        items: [],
+        page: parsedPage,
+        limit: parsedLimit,
+        total: 0,
+        categories: ITEM_CATEGORIES,
+        metalTypes: METAL_TYPES,
+      },
+    });
+  }
+
+  const catalogIds = catalogs.map((c) => c._id);
+  const imageFilter = { catalogId: { $in: catalogIds } };
+
+  if (category && String(category).trim() !== '') {
+    try {
+      imageFilter.category = normalizeCategory(category);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: e.message });
+    }
+  }
+
+  if (metalType && String(metalType).trim() !== '' && String(metalType).toLowerCase() !== 'all') {
+    try {
+      imageFilter.metalType = normalizeMetalType(metalType);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: e.message });
+    }
+  }
+
+  const minG =
+    minGrams !== undefined && minGrams !== null && String(minGrams).trim() !== ''
+      ? Number(minGrams)
+      : null;
+  const maxG =
+    maxGrams !== undefined && maxGrams !== null && String(maxGrams).trim() !== ''
+      ? Number(maxGrams)
+      : null;
+  if (minG != null || maxG != null) {
+    imageFilter.grams = {};
+    if (minG != null) {
+      if (isNaN(minG) || minG < 0) {
+        return res.status(400).json({ success: false, message: 'minGrams must be a non-negative number' });
+      }
+      imageFilter.grams.$gte = minG;
+    }
+    if (maxG != null) {
+      if (isNaN(maxG) || maxG < 0) {
+        return res.status(400).json({ success: false, message: 'maxGrams must be a non-negative number' });
+      }
+      imageFilter.grams.$lte = maxG;
+    }
+  }
+
+  const [total, images] = await Promise.all([
+    CatalogImage.countDocuments(imageFilter),
+    CatalogImage.find(imageFilter)
+      .sort({ createdAt: -1 })
+      .skip((parsedPage - 1) * parsedLimit)
+      .limit(parsedLimit),
+  ]);
+
+  const catalogMap = new Map(catalogs.map((c) => [String(c._id), c]));
+  const shopIds = catalogs.filter((c) => c.tenantType === 'SHOP').map((c) => c.tenantId);
+  const userIds = catalogs.filter((c) => c.tenantType === 'SERVICE_PROVIDER').map((c) => c.tenantId);
+
+  const [shops, spUsers] = await Promise.all([
+    shopIds.length ? Shop.find({ _id: { $in: shopIds } }) : [],
+    userIds.length ? User.find({ _id: { $in: userIds } }) : [],
+  ]);
+
+  const shopMap = new Map(shops.map((s) => [String(s._id), s]));
+  const userMap = new Map(spUsers.map((u) => [String(u._id), u]));
+
+  const items = images.map((img) => {
+    const catalog = catalogMap.get(String(img.catalogId));
+    const seller =
+      catalog?.tenantType === 'SHOP'
+        ? shopMap.get(String(catalog.tenantId))
+        : userMap.get(String(catalog?.tenantId));
+
+    return {
+      item: img,
+      catalog: catalog || null,
+      seller: seller
+        ? {
+            _id: seller._id,
+            type: catalog.tenantType,
+            name: seller.shopName || seller.userName || seller.name || null,
+            phoneNumber: seller.phoneNumber || null,
+            whatsappNumber: seller.whatsappNumber || null,
+            state: seller.state || null,
+            district: seller.district || null,
+            address: seller.address || null,
+          }
+        : null,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      page: parsedPage,
+      limit: parsedLimit,
+      total,
+      categories: ITEM_CATEGORIES,
+      metalTypes: METAL_TYPES,
     },
   });
 });
@@ -630,6 +877,7 @@ module.exports = {
   deleteCatalogImage,
   getPublicCatalog,
   getPublicCatalogsByTenant,
+  getShiftEcommerceItems,
   getCatalogImages,
   getAllCatalogsAdmin,
   getCatalogSubscriptionStatus,

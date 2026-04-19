@@ -60,6 +60,16 @@ const catalogImageSchema = new mongoose.Schema(
       ],
       default: 'other',
     },
+    metalType: {
+      type: String,
+      enum: ['gold', 'silver'],
+      default: 'gold',
+    },
+    grams: {
+      type: Number,
+      min: [0, 'Grams cannot be negative'],
+      default: null,
+    },
   },
   { timestamps: true }
 );

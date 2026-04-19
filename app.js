@@ -20,6 +20,7 @@ const referralRoutes = require('./routes/referralRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
 const catalogRoutes = require('./routes/catalogRoutes');
+const cartRoutes = require('./routes/cartRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const shareRoutes = require('./routes/shareRoutes');
 
@@ -46,6 +47,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/catalogs', catalogRoutes);
+app.use('/api/cart', cartRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/share', shareRoutes);
 
